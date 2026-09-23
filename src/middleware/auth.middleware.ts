@@ -27,6 +27,12 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
   }
 }
 
+/**
+ * Gates account creation.
+ * - If no users exist yet, allows the request through unauthenticated
+ *   (bootstrap: the very first account created becomes admin).
+ * - Otherwise, requires a valid Bearer token belonging to an existing admin.
+ */
 export async function requireAdminForRegistration(
   req: AuthenticatedRequest,
   _res: Response,

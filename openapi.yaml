@@ -9,8 +9,8 @@ info:
     - Prisma is used for the `User` and `File` tables
 
 servers:
-  - url: https://api.yourdomain.com/api
-    description: Production server
+- url: http://localhost:3000
+  description: Production server
 
 tags:
   - name: Auth

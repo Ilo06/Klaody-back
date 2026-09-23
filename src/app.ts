@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import multer from 'multer';
 import authRoutes from './routes/auth.routes';
+import fileRoutes from './routes/file.routes';
 
 dotenv.config();
 
@@ -18,11 +20,20 @@ app.get('/healthz', (_req, res) => {
 // Auth routes (register & login)
 app.use('/auth', authRoutes);
 
-// TODO: add other route groups (files, folders, etc.)
+// File routes (list, upload, download, rename, soft delete)
+app.use('/files', fileRoutes);
+
+// TODO: add other route groups (folders, trash, share)
 
 // Global error handler (basic)
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);
+
+  if (err instanceof multer.MulterError) {
+    // e.g. file too large, unexpected field name
+    return res.status(400).json({ error: err.message });
+  }
+
   const status = err.status || 500;
   const message = err.message || 'Internal Server Error';
   res.status(status).json({ error: message });
