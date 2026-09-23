@@ -1,7 +1,7 @@
 {
-  "name": "vdrive-backend",
+  "name": "Klaody-backend",
   "version": "1.0.0",
-  "description": "Backend for VDrive personal cloud storage",
+  "description": "Backend for Klaody personal cloud storage",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
