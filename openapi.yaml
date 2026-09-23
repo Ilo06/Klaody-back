@@ -56,10 +56,10 @@ components:
       properties:
         token:
           type: string
-          description: JWT to be sent as `Authorization: Bearer <token>`
+          description: "JWT to be sent as `Authorization: Bearer <token>`"
         expiresIn:
           type: integer
-          description: Seconds until token expiration
+          description: Seconds until token expiration (e.g. 604800 for 7 days)
 
     FileMetadata:
       type: object
@@ -267,6 +267,24 @@ paths:
           $ref: '#/components/responses/NotFound'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Files]
+      summary: Move file to trash (soft delete)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: File moved to trash
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /files/{id}/rename:
     patch:
@@ -331,26 +349,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderMetadata'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /files/{id}:
-    delete:
-      tags: [Files]
-      summary: Move file to trash (soft delete)
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '204':
-          description: File moved to trash
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
