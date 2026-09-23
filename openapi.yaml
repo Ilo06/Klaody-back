@@ -39,6 +39,13 @@ components:
           type: string
           format: password
           minLength: 8
+        isAdmin:
+          type: boolean
+          default: false
+          description: |
+            Grants admin rights to the new account. Only usable by an
+            existing admin (ignored/forced true for the very first account,
+            which always becomes admin via bootstrap).
 
     LoginRequest:
       type: object
@@ -149,8 +156,14 @@ paths:
   /auth/register:
     post:
       tags: [Auth]
-      summary: Create the initial admin user (single-user system)
-      security: []
+      summary: Create a user account
+      description: |
+        If no accounts exist yet, this is open and the created account
+        becomes admin (bootstrap). Once at least one account exists, a
+        valid admin Bearer token is required to create further accounts.
+      security:
+        - BearerAuth: []
+        - {}
       requestBody:
         required: true
         content:
@@ -166,6 +179,18 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token (required once any account exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Authenticated but not an admin
           content:
             application/json:
               schema:
