@@ -5,7 +5,6 @@ import prisma from '../prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { FILE_ROOT } from '../middleware/upload.middleware';
 
-/** Shape returned to clients — never leaks `storedName` (the on-disk path). */
 function serializeFile(file: {
   id: number;
   name: string;
@@ -17,7 +16,7 @@ function serializeFile(file: {
     id: file.id,
     name: file.name,
     mimeType: file.mimeType,
-    size: Number(file.size), // safe: JS can represent ints up to ~9 PB exactly
+    size: Number(file.size), 
     uploadedAt: file.uploadedAt,
   };
 }
@@ -27,7 +26,7 @@ function parseId(raw: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/** GET /files — list the authenticated user's non-trashed files */
+// GET /files — list the authenticated user's non-trashed files 
 export async function listFiles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const files = await prisma.file.findMany({
@@ -40,7 +39,7 @@ export async function listFiles(req: AuthenticatedRequest, res: Response, next: 
   }
 }
 
-/** POST /files — upload (multer has already streamed the file to disk) */
+// POST /files — upload (multer has already streamed the file to disk) 
 export async function uploadFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     if (!req.file) {
@@ -63,7 +62,7 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
-/** GET /files/:id — stream the file back to the client */
+// GET /files/:id — stream the file back to the client 
 export async function downloadFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const id = parseId(req.params.id);
@@ -98,7 +97,7 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
   }
 }
 
-/** PATCH /files/:id/rename */
+// PATCH /files/:id/rename 
 export async function renameFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const id = parseId(req.params.id);
@@ -125,7 +124,7 @@ export async function renameFile(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
-/** DELETE /files/:id — soft delete (moves to trash) */
+// DELETE /files/:id — soft delete (moves to trash) 
 export async function deleteFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const id = parseId(req.params.id);

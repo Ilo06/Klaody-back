@@ -11,8 +11,6 @@ import {
 
 const router = Router();
 
-// Every route below requires a valid Bearer token, and only ever
-// touches files owned by the requesting user (see controller queries).
 router.use(authenticate);
 
 router.get('/', listFiles);
