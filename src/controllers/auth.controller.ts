@@ -6,18 +6,10 @@ import prisma from '../prisma/client';
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 const JWT_EXPIRES_SECONDS = 7 * 24 * 60 * 60; // 7 days, in seconds
 
-/** Helper to generate a signed JWT */
 function generateToken(userId: number) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_SECONDS });
 }
 
-/**
- * Create a new user.
- * - First user ever created (bootstrap) is always admin.
- * - After that, `requireAdminForRegistration` middleware ensures only an
- *   admin can reach this handler, and that admin may optionally set
- *   `isAdmin` on the account being created.
- */
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password, isAdmin } = req.body;
@@ -49,7 +41,6 @@ export async function register(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-/** Login – validate credentials and return JWT */
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password } = req.body;
