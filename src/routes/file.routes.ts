@@ -6,6 +6,7 @@ import {
   uploadFile,
   downloadFile,
   renameFile,
+  moveFile,
   deleteFile,
 } from '../controllers/file.controller';
 
@@ -17,7 +18,7 @@ router.get('/', listFiles);
 router.post('/', upload.single('file'), uploadFile);
 router.get('/:id', downloadFile);
 router.patch('/:id/rename', renameFile);
+router.patch('/:id/move', moveFile);
 router.delete('/:id', deleteFile);
 
 export default router;
-  

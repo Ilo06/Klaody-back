@@ -16,13 +16,13 @@ tags:
   - name: Auth
     description: Registration and login
   - name: Files
-    description: File listing, upload, and download
+    description: File listing, upload, download, rename and move
   - name: Folders
-    description: Folder related endpoints
+    description: Folder creation, browsing, rename and move
   - name: Trash
-    description: trash related endpoints
+    description: Soft delete, trash listing, restore (single and bulk) and emptying the trash
   - name: Share
-    description: share related endpoints
+    description: Public share links
   - name: System
     description: Health and operational endpoints
 
@@ -76,7 +76,7 @@ components:
 
     FileMetadata:
       type: object
-      required: [id, name, mimeType, size, uploadedAt]
+      required: [id, name, mimeType, size, folderId, uploadedAt]
       properties:
         id:
           type: integer
@@ -87,9 +87,18 @@ components:
         size:
           type: integer
           format: int64
+        folderId:
+          type: integer
+          nullable: true
+          description: Containing folder, or null when the file is at the root
         uploadedAt:
           type: string
           format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when the file is in the trash, null otherwise
 
     FileUploadResponse:
       type: object
@@ -101,6 +110,9 @@ components:
         size:
           type: integer
           format: int64
+        folderId:
+          type: integer
+          nullable: true
 
     ErrorResponse:
       type: object
@@ -108,9 +120,77 @@ components:
         error:
           type: string
 
+    BulkItemsRequest:
+      type: object
+      description: |
+        Items to act on. At least one id overall, at most 1000 ids (files + folders combined).
+        Duplicate ids are ignored.
+      properties:
+        fileIds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        folderIds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+
+    BulkItemRef:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [file, folder]
+        id:
+          type: integer
+
+    BulkFailure:
+      type: object
+      required: [type, id, status, error]
+      properties:
+        type:
+          type: string
+          enum: [file, folder]
+        id:
+          type: integer
+        status:
+          type: integer
+          enum: [404, 409]
+          description: What the equivalent single-item request would have returned
+        error:
+          type: string
+
+    BulkResult:
+      type: object
+      required: [succeeded, failed]
+      description: |
+        Every item is attempted independently, so a bulk request returns 200 even when some
+        (or all) items fail. Check `failed` for per-item errors.
+      properties:
+        succeeded:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkItemRef'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkFailure'
+
+    EmptyTrashResult:
+      type: object
+      required: [deletedFiles, deletedFolders]
+      properties:
+        deletedFiles:
+          type: integer
+        deletedFolders:
+          type: integer
+
     FolderMetadata:
       type: object
-      required: [id, name, parentId, uploadedAt]
+      required: [id, name, parentId, createdAt]
       properties:
         id:
           type: integer
@@ -119,13 +199,15 @@ components:
         parentId:
           type: integer
           nullable: true
-        uploadedAt:
+          description: Parent folder, or null when the folder is at the root
+        createdAt:
           type: string
           format: date-time
         deletedAt:
           type: string
           format: date-time
           nullable: true
+          description: Set when the folder is in the trash, null otherwise
     ShareResponse:
       type: object
       properties:
@@ -143,13 +225,19 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     BadRequest:
-      description: Malformed request (e.g., missing file part)
+      description: Malformed request or invalid parameter (e.g., missing file part, bad id, folder cycle)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: File not found
+      description: Resource not found (or not owned by the caller)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Name conflict, or the parent folder is still in the trash
       content:
         application/json:
           schema:
@@ -230,7 +318,80 @@ paths:
   /files:
     get:
       tags: [Files]
-      summary: List all files belonging to the authenticated user
+      summary: List the authenticated user's files (excluding trash)
+      description: |
+        Without `folderId`, returns every non-trashed file the user owns.
+        Use `folderId=root` for the top level only, or a folder id for that folder's direct files.
+        All filters are optional and combine with AND. Empty values are ignored.
+        Date filters are inclusive and accept ISO 8601 (`2026-09-24` or `2026-09-24T10:00:00Z`);
+        a date without a time means 00:00 UTC.
+        Default order: `uploadedAt` descending.
+      parameters:
+        - name: folderId
+          in: query
+          required: false
+          description: '`root` for top-level files, or a folder id. Omit for all files.'
+          schema:
+            type: string
+            pattern: '^(root|[1-9][0-9]*)$'
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive substring match on the file name
+          schema:
+            type: string
+            maxLength: 255
+        - name: mimeType
+          in: query
+          required: false
+          description: Exact MIME type (`application/pdf`) or a wildcard family (`image/*`), case-insensitive
+          schema:
+            type: string
+            maxLength: 255
+        - name: minSize
+          in: query
+          required: false
+          description: Minimum size in bytes (inclusive)
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: maxSize
+          in: query
+          required: false
+          description: Maximum size in bytes (inclusive). Must be >= `minSize`.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: uploadedAfter
+          in: query
+          required: false
+          description: Only files uploaded at or after this date
+          schema:
+            type: string
+            format: date-time
+        - name: uploadedBefore
+          in: query
+          required: false
+          description: Only files uploaded at or before this date
+          schema:
+            type: string
+            format: date-time
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [name, size, uploadedAt]
+            default: uploadedAt
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         '200':
           description: Array of file metadata
@@ -240,8 +401,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/FileMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags: [Files]
       summary: Upload a new file (streamed, supports large files)
@@ -257,6 +422,9 @@ paths:
                   type: string
                   format: binary
                   description: The file to upload
+                folderId:
+                  type: integer
+                  description: Destination folder. Omit (or leave empty) for the root.
       responses:
         '201':
           description: File stored
@@ -268,6 +436,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /files/{id}:
     get:
@@ -346,6 +516,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -373,6 +545,8 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 255
       responses:
         '200':
           description: Folder renamed
@@ -380,8 +554,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: A sibling folder already has this name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -389,6 +571,10 @@ paths:
     delete:
       tags: [Trash]
       summary: Move folder and all its contents to trash (recursive)
+      description: |
+        The folder, its sub-folders and their files are trashed together (same `deletedAt`),
+        so restoring the folder brings back exactly that batch. Items that were already in the
+        trash keep their own state.
       security:
         - BearerAuth: []
       parameters:
@@ -400,6 +586,8 @@ paths:
       responses:
         '204':
           description: Folder moved to trash
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -409,11 +597,45 @@ paths:
     get:
       tags: [Trash]
       summary: List trashed files and folders
+      description: |
+        Only top-level trashed items are listed: files and folders that were trashed as part of
+        a trashed parent folder come back with that folder and are not listed separately
+        (filters apply to those top-level items only).
+        All filters are optional and combine with AND. Date filters are inclusive and accept ISO 8601.
       security:
         - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Only list files or only folders
+          schema:
+            type: string
+            enum: [file, folder]
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive substring match on the item name
+          schema:
+            type: string
+            maxLength: 255
+        - name: deletedAfter
+          in: query
+          required: false
+          description: Only items trashed at or after this date
+          schema:
+            type: string
+            format: date-time
+        - name: deletedBefore
+          in: query
+          required: false
+          description: Only items trashed at or before this date
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
-          description: Trashed items
+          description: Trashed items, most recently deleted first
           content:
             application/json:
               schema:
@@ -427,6 +649,102 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/FolderMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Trash]
+      summary: Move several files and folders to the trash (bulk delete)
+      description: |
+        Bulk equivalent of `DELETE /files/{id}` and `DELETE /folders/{id}`.
+        Folders are trashed recursively, exactly like the single-item route. If a folder and
+        something inside it are both listed, the inner item counts as a success.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkItemsRequest'
+      responses:
+        '200':
+          description: Per-item outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Trash]
+      summary: Empty the trash (permanent, irreversible)
+      description: |
+        Permanently deletes every trashed file and folder of the caller, including the stored
+        file contents on disk. Items outside the trash are not touched. Unlike everything else
+        in the Trash tag, this cannot be undone.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Number of items permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyTrashResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trash/restore:
+    post:
+      tags: [Trash]
+      summary: Restore several files and folders (bulk restore)
+      description: |
+        Bulk equivalent of the two single-item restore routes, with the same rules. Folders are
+        restored before files, and a folder before its sub-folders, so listing a folder together
+        with its contents works in any order. Items that fail (404, or 409 for a trashed parent
+        or a name conflict) are reported in `failed` and do not block the others.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkItemsRequest'
+      responses:
+        '200':
+          description: Per-item outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trash/restore-all:
+    post:
+      tags: [Trash]
+      summary: Restore everything in the trash
+      description: |
+        Restores every top-level trashed item (each folder brings back the items trashed with it).
+        Same response and per-item failure rules as `POST /trash/restore`.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Per-item outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /trash/files/{id}/restore:
     post:
@@ -447,8 +765,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The file's parent folder is still in the trash (restore the folder first)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -456,6 +782,9 @@ paths:
     post:
       tags: [Trash]
       summary: Restore a trashed folder
+      description: |
+        Restores the folder together with the sub-folders and files that were trashed in the
+        same batch. Items trashed separately stay in the trash.
       security:
         - BearerAuth: []
       parameters:
@@ -471,13 +800,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The parent folder is still in the trash, or a live sibling already has the same name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
   /files/{id}/move:
-    post:
+    patch:
       tags: [Files]
       summary: Move a file to another folder (or root)
       security:
@@ -499,6 +836,7 @@ paths:
                 folderId:
                   type: integer
                   nullable: true
+                  description: Destination folder, or null for the root
       responses:
         '200':
           description: File moved
@@ -506,13 +844,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: File or destination folder not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
   /folders/{id}/move:
-    post:
+    patch:
       tags: [Folders]
       summary: Move a folder to another folder (or root)
       security:
@@ -534,6 +878,7 @@ paths:
                 parentId:
                   type: integer
                   nullable: true
+                  description: Destination folder, or null for the root
       responses:
         '200':
           description: Folder moved
@@ -541,12 +886,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderMetadata'
+        '400':
+          description: Invalid id, or the destination is the folder itself or one of its descendants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Folder or destination folder not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: A folder with the same name already exists in the destination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
   /folders:
+    get:
+      tags: [Folders]
+      summary: List folders (excluding trash)
+      description: |
+        Without `parentId`, returns every non-trashed folder the user owns.
+        Use `parentId=root` for the top level only, or a folder id for its direct sub-folders.
+        All filters are optional and combine with AND. Empty values are ignored.
+        Date filters are inclusive and accept ISO 8601.
+        Default order: `name` ascending.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parentId
+          in: query
+          required: false
+          description: '`root` for top-level folders, or a folder id. Omit for all folders.'
+          schema:
+            type: string
+            pattern: '^(root|[1-9][0-9]*)$'
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive substring match on the folder name
+          schema:
+            type: string
+            maxLength: 255
+        - name: createdAfter
+          in: query
+          required: false
+          description: Only folders created at or after this date
+          schema:
+            type: string
+            format: date-time
+        - name: createdBefore
+          in: query
+          required: false
+          description: Only folders created at or before this date
+          schema:
+            type: string
+            format: date-time
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [name, createdAt]
+            default: name
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: Array of folder metadata, sorted by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FolderMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Folders]
       summary: Create a new folder
@@ -562,9 +992,12 @@ paths:
               properties:
                 name:
                   type: string
+                  minLength: 1
+                  maxLength: 255
                 parentId:
                   type: integer
                   nullable: true
+                  description: Parent folder. Omit or null for the root.
       responses:
         '201':
           description: Folder created
@@ -574,6 +1007,16 @@ paths:
                 $ref: '#/components/schemas/FolderMetadata'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: A sibling folder already has this name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /files/{id}/share:
     post:
