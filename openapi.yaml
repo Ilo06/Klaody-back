@@ -17,6 +17,12 @@ tags:
     description: Registration and login
   - name: Files
     description: File listing, upload, and download
+  - name: Folders
+    description: Folder related endpoints
+  - name: Trash
+    description: trash related endpoints
+  - name: Share
+    description: share related endpoints
   - name: System
     description: Health and operational endpoints
 
@@ -293,7 +299,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
     delete:
-      tags: [Files]
+      tags: [Trash]
       summary: Move file to trash (soft delete)
       security:
         - BearerAuth: []
@@ -347,7 +353,7 @@ paths:
 
   /folders/{id}/rename:
     patch:
-      tags: [Files]
+      tags: [Folders]
       summary: Rename a folder
       security:
         - BearerAuth: []
@@ -381,7 +387,7 @@ paths:
 
   /folders/{id}:
     delete:
-      tags: [Files]
+      tags: [Trash]
       summary: Move folder and all its contents to trash (recursive)
       security:
         - BearerAuth: []
@@ -401,7 +407,7 @@ paths:
 
   /trash:
     get:
-      tags: [Files]
+      tags: [Trash]
       summary: List trashed files and folders
       security:
         - BearerAuth: []
@@ -424,7 +430,7 @@ paths:
 
   /trash/files/{id}/restore:
     post:
-      tags: [Files]
+      tags: [Trash]
       summary: Restore a trashed file
       security:
         - BearerAuth: []
@@ -448,7 +454,7 @@ paths:
 
   /trash/folders/{id}/restore:
     post:
-      tags: [Files]
+      tags: [Trash]
       summary: Restore a trashed folder
       security:
         - BearerAuth: []
@@ -507,7 +513,7 @@ paths:
 
   /folders/{id}/move:
     post:
-      tags: [Files]
+      tags: [Folders]
       summary: Move a folder to another folder (or root)
       security:
         - BearerAuth: []
@@ -542,7 +548,7 @@ paths:
 
   /folders:
     post:
-      tags: [Files]
+      tags: [Folders]
       summary: Create a new folder
       security:
         - BearerAuth: []
@@ -571,7 +577,7 @@ paths:
 
   /files/{id}/share:
     post:
-      tags: [Files]
+      tags: [Share]
       summary: Generate a public download token
       security:
         - BearerAuth: []
@@ -603,7 +609,7 @@ paths:
 
   /share/{token}:
     get:
-      tags: [Files]
+      tags: [Share]
       summary: Public download via token (no JWT required)
       security: []
       parameters:
