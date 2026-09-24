@@ -20,7 +20,7 @@ tags:
   - name: Folders
     description: Folder creation, browsing, rename and move
   - name: Trash
-    description: Soft delete, trash listing and restore
+    description: Soft delete, trash listing, restore (single and bulk) and emptying the trash
   - name: Share
     description: Public share links
   - name: System
@@ -119,6 +119,74 @@ components:
       properties:
         error:
           type: string
+
+    BulkItemsRequest:
+      type: object
+      description: |
+        Items to act on. At least one id overall, at most 1000 ids (files + folders combined).
+        Duplicate ids are ignored.
+      properties:
+        fileIds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        folderIds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+
+    BulkItemRef:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [file, folder]
+        id:
+          type: integer
+
+    BulkFailure:
+      type: object
+      required: [type, id, status, error]
+      properties:
+        type:
+          type: string
+          enum: [file, folder]
+        id:
+          type: integer
+        status:
+          type: integer
+          enum: [404, 409]
+          description: What the equivalent single-item request would have returned
+        error:
+          type: string
+
+    BulkResult:
+      type: object
+      required: [succeeded, failed]
+      description: |
+        Every item is attempted independently, so a bulk request returns 200 even when some
+        (or all) items fail. Check `failed` for per-item errors.
+      properties:
+        succeeded:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkItemRef'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkFailure'
+
+    EmptyTrashResult:
+      type: object
+      required: [deletedFiles, deletedFolders]
+      properties:
+        deletedFiles:
+          type: integer
+        deletedFolders:
+          type: integer
 
     FolderMetadata:
       type: object
@@ -583,6 +651,98 @@ paths:
                       $ref: '#/components/schemas/FolderMetadata'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Trash]
+      summary: Move several files and folders to the trash (bulk delete)
+      description: |
+        Bulk equivalent of `DELETE /files/{id}` and `DELETE /folders/{id}`.
+        Folders are trashed recursively, exactly like the single-item route. If a folder and
+        something inside it are both listed, the inner item counts as a success.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkItemsRequest'
+      responses:
+        '200':
+          description: Per-item outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Trash]
+      summary: Empty the trash (permanent, irreversible)
+      description: |
+        Permanently deletes every trashed file and folder of the caller, including the stored
+        file contents on disk. Items outside the trash are not touched. Unlike everything else
+        in the Trash tag, this cannot be undone.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Number of items permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyTrashResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trash/restore:
+    post:
+      tags: [Trash]
+      summary: Restore several files and folders (bulk restore)
+      description: |
+        Bulk equivalent of the two single-item restore routes, with the same rules. Folders are
+        restored before files, and a folder before its sub-folders, so listing a folder together
+        with its contents works in any order. Items that fail (404, or 409 for a trashed parent
+        or a name conflict) are reported in `failed` and do not block the others.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkItemsRequest'
+      responses:
+        '200':
+          description: Per-item outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trash/restore-all:
+    post:
+      tags: [Trash]
+      summary: Restore everything in the trash
+      description: |
+        Restores every top-level trashed item (each folder brings back the items trashed with it).
+        Same response and per-item failure rules as `POST /trash/restore`.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Per-item outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
         '401':
           $ref: '#/components/responses/Unauthorized'
 

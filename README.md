@@ -24,7 +24,7 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
 - Streaming upload/download (no whole‑file buffering), 5 GB max file size by default
 - File listing, rename, move, and soft‑delete (trash)
 - Nested folders (create, browse, rename, move) with recursive soft‑delete
-- Trash listing and restore for files and folders
+- Trash listing and restore for files and folders, in single or bulk mode, plus restore‑all and empty‑trash
 - OpenAPI contract in `openapi.yaml`
 
 ## Prerequisites
@@ -122,6 +122,10 @@ All routes require the `Authorization: Bearer <token>` header. Folder names must
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/trash` | List trashed items as `{ files, folders }`. Only top‑level trashed items are listed; contents of a trashed folder come back with it. Filters: `type` (`file` \| `folder`), `name` (substring), `deletedAfter` / `deletedBefore` (ISO 8601, inclusive). |
+| `POST` | `/trash` | Bulk delete: move several items to the trash. Body: `{ "fileIds": [1, 2], "folderIds": [3] }` (max 1000 ids). Returns `200 { succeeded, failed }`; each item is handled independently and failures carry the status the single‑item route would have returned. |
+| `POST` | `/trash/restore` | Bulk restore. Same body and response as `POST /trash`. Parents are restored before children, so a folder and its contents can be listed together. |
+| `POST` | `/trash/restore-all` | Restore everything in the trash. Same response as `POST /trash`. |
+| `DELETE` | `/trash` | **Empty the trash: permanently** deletes every trashed file and folder, including the stored files on disk. Cannot be undone. Returns `{ deletedFiles, deletedFolders }`. |
 | `POST` | `/trash/files/:id/restore` | Restore a file. `409` if its parent folder is still trashed. |
 | `POST` | `/trash/folders/:id/restore` | Restore a folder with everything trashed together with it. `409` if its parent is still trashed or a live sibling has the same name. |
 

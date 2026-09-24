@@ -9,8 +9,11 @@ import { parseId, parseFolderFilter } from '../utils/parse';
 import { serializeFile } from '../utils/serialize';
 import { getOwnedFolder } from '../utils/folders';
 import { parseFileFilters } from '../utils/filters';
+import { trashFile } from '../services/trash.service';
 
 // Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
+// - `filename` is an ASCII-only fallback for legacy clients
+// - `filename*` carries the real UTF-8 name, percent-encoded
 export function contentDisposition(name: string): string {
   const fallback = name.replace(/[^\x20-\x7e]|["\\%]/g, '_');
   const encoded = encodeURIComponent(name).replace(
@@ -26,6 +29,8 @@ async function discardUpload(file?: Express.Multer.File) {
 }
 
 // GET /files — list the authenticated user's non-trashed files.
+// Filters: folderId ("root" or an id; omitted = all), name, mimeType ("image/*" allowed),
+// minSize, maxSize, uploadedAfter, uploadedBefore. Sorting: sortBy (name|size|uploadedAt), order.
 export async function listFiles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const filter = parseFolderFilter(req.query.folderId);
@@ -52,6 +57,9 @@ export async function listFiles(req: AuthenticatedRequest, res: Response, next: 
 }
 
 // POST /files — upload (multer has already streamed the file to disk).
+// Optional multipart field `folderId` (omitted/empty = root).
+// Note: multipart fields can arrive after the file part, so the folder is validated
+// only once the file is on disk; on any rejection the stored file is removed.
 export async function uploadFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     if (!req.file) {
@@ -192,14 +200,8 @@ export async function deleteFile(req: AuthenticatedRequest, res: Response, next:
       return res.status(400).json({ error: 'invalid file id' });
     }
 
-    const file = await prisma.file.findFirst({
-      where: { id, userId: req.userId!, deletedAt: null },
-    });
-    if (!file) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    await prisma.file.update({ where: { id }, data: { deletedAt: new Date() } });
+    const r = await trashFile(req.userId!, id, new Date());
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
     res.status(204).send();
   } catch (err) {
     next(err);

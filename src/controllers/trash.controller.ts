@@ -1,46 +1,58 @@
 import { Response, NextFunction } from 'express';
-import prisma from '../prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
-import { parseId } from '../utils/parse';
+import { parseId, parseBulkIds } from '../utils/parse';
 import { serializeFile, serializeFolder } from '../utils/serialize';
-import { siblingNameTaken, collectSubtreeIds } from '../utils/folders';
 import { parseTrashFilters } from '../utils/filters';
-
-function sameInstant(a: Date | null, b: Date | null): boolean {
-  return a !== null && b !== null && a.getTime() === b.getTime();
-}
+import * as trash from '../services/trash.service';
 
 // GET /trash — list trashed items.
+// Items trashed as part of a folder's batch (same deletedAt as their trashed parent) are hidden:
+// they come back with the folder, so only the top-level trashed items are listed.
+// Filters: type (file|folder), name, deletedAfter, deletedBefore.
 export async function listTrash(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.userId!;
-    const { type, name, deletedAt } = parseTrashFilters(req.query);
+    const filters = parseTrashFilters(req.query);
+    const { files, folders } = await trash.findTopLevelTrash(req.userId!, filters);
+    res.json({ files: files.map(serializeFile), folders: folders.map(serializeFolder) });
+  } catch (err) {
+    next(err);
+  }
+}
 
-    const [files, folders] = await Promise.all([
-      type === 'folder'
-        ? []
-        : prisma.file.findMany({
-            where: { userId, deletedAt, ...(name ? { name } : {}) },
-            include: { folder: { select: { deletedAt: true } } },
-            orderBy: { deletedAt: 'desc' },
-          }),
-      type === 'file'
-        ? []
-        : prisma.folder.findMany({
-            where: { userId, deletedAt, ...(name ? { name } : {}) },
-            include: { parent: { select: { deletedAt: true } } },
-            orderBy: { deletedAt: 'desc' },
-          }),
-    ]);
+// POST /trash — bulk move to trash. Body { fileIds?: number[], folderIds?: number[] }.
+// Always 200 for a well-formed request; per-item outcomes are in { succeeded, failed }.
+export async function bulkTrash(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { fileIds, folderIds } = parseBulkIds(req.body);
+    res.json(await trash.trashMany(req.userId!, fileIds, folderIds));
+  } catch (err) {
+    next(err);
+  }
+}
 
-    res.json({
-      files: files
-        .filter((f) => !sameInstant(f.folder?.deletedAt ?? null, f.deletedAt))
-        .map(serializeFile),
-      folders: folders
-        .filter((f) => !sameInstant(f.parent?.deletedAt ?? null, f.deletedAt))
-        .map(serializeFolder),
-    });
+// POST /trash/restore — bulk restore. Same body and response shape as POST /trash.
+export async function bulkRestore(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { fileIds, folderIds } = parseBulkIds(req.body);
+    res.json(await trash.restoreMany(req.userId!, fileIds, folderIds));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /trash/restore-all — restore everything in the trash. Same response shape as POST /trash.
+export async function restoreAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    res.json(await trash.restoreAll(req.userId!));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /trash — permanently delete everything in the trash (database rows and stored files).
+export async function emptyTrash(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    res.json(await trash.emptyTrash(req.userId!));
   } catch (err) {
     next(err);
   }
@@ -55,65 +67,27 @@ export async function restoreFile(req: AuthenticatedRequest, res: Response, next
       return res.status(400).json({ error: 'invalid file id' });
     }
 
-    const file = await prisma.file.findFirst({
-      where: { id, userId: req.userId!, deletedAt: { not: null } },
-      include: { folder: { select: { deletedAt: true } } },
-    });
-    if (!file) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    if (file.folder?.deletedAt) {
-      return res.status(409).json({ error: 'Parent folder is in the trash; restore it first' });
-    }
-
-    const restored = await prisma.file.update({ where: { id }, data: { deletedAt: null } });
-    res.json(serializeFile(restored));
+    const r = await trash.restoreFile(req.userId!, id);
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    res.json(serializeFile(r.value));
   } catch (err) {
     next(err);
   }
 }
 
 // POST /trash/folders/:id/restore — restore a folder together with the sub-folders and files
+// that were trashed in the same batch. Items trashed separately stay in the trash.
+// 409 if the parent is still trashed, or a live sibling already has the same name.
 export async function restoreFolder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.userId!;
     const id = parseId(req.params.id);
     if (id === null) {
       return res.status(400).json({ error: 'invalid folder id' });
     }
 
-    const folder = await prisma.folder.findFirst({
-      where: { id, userId, deletedAt: { not: null } },
-      include: { parent: { select: { deletedAt: true } } },
-    });
-    if (!folder || !folder.deletedAt) {
-      return res.status(404).json({ error: 'Folder not found' });
-    }
-    if (folder.parent?.deletedAt) {
-      return res.status(409).json({ error: 'Parent folder is in the trash; restore it first' });
-    }
-    if (await siblingNameTaken(userId, folder.parentId, folder.name)) {
-      return res
-        .status(409)
-        .json({ error: 'A folder with this name already exists in the destination' });
-    }
-
-    const batch = folder.deletedAt;
-    const ids = await collectSubtreeIds(userId, id, batch);
-
-    await prisma.$transaction([
-      prisma.folder.updateMany({
-        where: { id: { in: ids }, userId, deletedAt: batch },
-        data: { deletedAt: null },
-      }),
-      prisma.file.updateMany({
-        where: { folderId: { in: ids }, userId, deletedAt: batch },
-        data: { deletedAt: null },
-      }),
-    ]);
-
-    const restored = await prisma.folder.findUniqueOrThrow({ where: { id } });
-    res.json(serializeFolder(restored));
+    const r = await trash.restoreFolder(req.userId!, id);
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    res.json(serializeFolder(r.value.folder));
   } catch (err) {
     next(err);
   }

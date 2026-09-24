@@ -1,16 +1,18 @@
 import type { Prisma } from '@prisma/client';
+import { HttpError } from './errors';
 
-export class HttpError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
+// Query-string filter/sort parsing for the GET list routes.
+// Invalid input throws an HttpError, which the controllers pass to `next(err)`
+// and the global error handler turns into `{ error }` with the given status.
 
 type Query = Record<string, unknown>;
 type Order = 'asc' | 'desc';
 type NameFilter = { contains: string; mode: 'insensitive' };
 type DateRange = { gte?: Date; lte?: Date };
 
+// ---- primitives -----------------------------------------------------------
+
+/** A single non-empty string value; empty/absent = undefined. */
 function text(raw: unknown, name: string): string | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== 'string') throw new HttpError(400, `${name} must be a single value`);
@@ -69,7 +71,7 @@ function sort<T extends string>(
   return { by: by as T, order };
 }
 
-//  GET /files ---
+// ---- GET /files -----------------------------------------------------------
 
 export function parseFileFilters(q: Query) {
   const where: Prisma.FileWhereInput = {};
@@ -106,7 +108,7 @@ export function parseFileFilters(q: Query) {
   return { where, orderBy };
 }
 
-//  GET /folders -
+// ---- GET /folders ---------------------------------------------------------
 
 export function parseFolderFilters(q: Query) {
   const where: Prisma.FolderWhereInput = {};
@@ -123,7 +125,7 @@ export function parseFolderFilters(q: Query) {
   return { where, orderBy };
 }
 
-//  GET /trash ---
+// ---- GET /trash -----------------------------------------------------------
 
 export function parseTrashFilters(q: Query) {
   const type = text(q.type, 'type');

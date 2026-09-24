@@ -5,12 +5,8 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { parseId, cleanName, parseFolderFilter } from '../utils/parse';
 import { serializeFolder } from '../utils/serialize';
 import { parseFolderFilters } from '../utils/filters';
-import {
-  getOwnedFolder,
-  siblingNameTaken,
-  isSelfOrDescendant,
-  collectSubtreeIds,
-} from '../utils/folders';
+import { getOwnedFolder, siblingNameTaken, isSelfOrDescendant } from '../utils/folders';
+import { trashFolder } from '../services/trash.service';
 
 const NAME_CONFLICT = 'A folder with this name already exists in the destination';
 
@@ -153,33 +149,17 @@ export async function moveFolder(req: AuthenticatedRequest, res: Response, next:
 }
 
 // DELETE /folders/:id — move the folder and everything inside it to the trash.
+// The folder, its live sub-folders and their live files all get the same `deletedAt`,
+// which is what lets a restore bring back exactly that batch (see trash.service).
 export async function deleteFolder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.userId!;
     const id = parseId(req.params.id);
     if (id === null) {
       return res.status(400).json({ error: 'invalid folder id' });
     }
 
-    const folder = await getOwnedFolder(userId, id);
-    if (!folder) {
-      return res.status(404).json({ error: 'Folder not found' });
-    }
-
-    const now = new Date();
-    const ids = await collectSubtreeIds(userId, id, null);
-
-    await prisma.$transaction([
-      prisma.folder.updateMany({
-        where: { id: { in: ids }, userId, deletedAt: null },
-        data: { deletedAt: now },
-      }),
-      prisma.file.updateMany({
-        where: { folderId: { in: ids }, userId, deletedAt: null },
-        data: { deletedAt: now },
-      }),
-    ]);
-
+    const r = await trashFolder(req.userId!, id, new Date());
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
     res.status(204).send();
   } catch (err) {
     next(err);
