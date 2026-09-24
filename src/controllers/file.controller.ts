@@ -5,7 +5,7 @@ import prisma from '../prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { FILE_ROOT } from '../middleware/upload.middleware';
 
-function serializeFile(file: {
+export function serializeFile(file: {
   id: number;
   name: string;
   mimeType: string;
@@ -21,7 +21,17 @@ function serializeFile(file: {
   };
 }
 
-function parseId(raw: string): number | null {
+// Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
+export function contentDisposition(name: string): string {
+  const fallback = name.replace(/[^\x20-\x7e]|["\\%]/g, '_');
+  const encoded = encodeURIComponent(name).replace(
+    /['()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
+export function parseId(raw: string): number | null {
   const id = Number(raw);
   return Number.isInteger(id) && id > 0 ? id : null;
 }
@@ -83,10 +93,7 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
     }
 
     res.setHeader('Content-Type', file.mimeType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(file.name)}"`
-    );
+    res.setHeader('Content-Disposition', contentDisposition(file.name));
     res.setHeader('Content-Length', file.size.toString());
 
     const stream = fs.createReadStream(filePath);

@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import authRoutes from './routes/auth.routes';
 import fileRoutes from './routes/file.routes';
+import trashRoutes from './routes/trash.routes';
 
 dotenv.config();
 
@@ -23,7 +24,10 @@ app.use('/auth', authRoutes);
 // File routes (list, upload, download, rename, soft delete)
 app.use('/files', fileRoutes);
 
-// TODO: add other route groups (folders, trash, share)
+// Trash routes (list, restore)
+app.use('/trash', trashRoutes);
+
+// TODO: add other route groups (folders, share)
 
 // Global error handler (basic)
 app.use((err: any, _req: any, res: any, _next: any) => {
