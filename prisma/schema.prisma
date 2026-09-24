@@ -14,6 +14,22 @@ model User {
   isAdmin      Boolean  @default(false)
   createdAt    DateTime @default(now())
   files        File[]
+  folders      Folder[]
+}
+
+model Folder {
+  id        Int       @id @default(autoincrement())
+  name      String
+  parentId  Int?      // null = root
+  parent    Folder?   @relation("FolderTree", fields: [parentId], references: [id])
+  children  Folder[]  @relation("FolderTree")
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files     File[]
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // soft delete / trash marker (shared by the whole trashed subtree)
+
+  @@index([userId, parentId])
 }
 
 model File {
@@ -22,13 +38,15 @@ model File {
   mimeType   String
   size       BigInt
   storedName String    @unique // generated filename on disk under FILE_ROOT — never the user-supplied name
-  folderId   Int?      // will reference Folder once that model exists; null = root
+  folderId   Int?      // null = root
+  folder     Folder?   @relation(fields: [folderId], references: [id])
   userId     Int
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   uploadedAt DateTime  @default(now())
   deletedAt  DateTime? // soft delete / trash marker
 
   @@index([userId])
+  @@index([folderId])
 }
 
-// Additional models (Folder, ShareLink) will be added later.
+// ShareLink will be added later.
