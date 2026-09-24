@@ -13,6 +13,8 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
   - [Health Check](#health-check)
   - [Authentication](#authentication)
   - [Files](#files)
+  - [Folders](#folders)
+  - [Trash](#trash)
 - [Scripts](#scripts)
 - [License](#license)
 
@@ -20,7 +22,9 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
 - JWT‑based authentication, bootstrapped as a single admin account
 - Admin-gated account creation (the first registered user becomes admin; only an admin can register further accounts afterwards)
 - Streaming upload/download (no whole‑file buffering), 5 GB max file size by default
-- File listing, rename, and soft‑delete (trash)
+- File listing, rename, move, and soft‑delete (trash)
+- Nested folders (create, browse, rename, move) with recursive soft‑delete
+- Trash listing and restore for files and folders
 - OpenAPI contract in `openapi.yaml`
 
 ## Prerequisites
@@ -60,9 +64,12 @@ npm run prisma:migrate   # will prompt for a migration name; e.g. "init"
 ```
 The `prisma/schema.prisma` currently defines `User` and `File` models:
 - `User` — email, password hash, `isAdmin` flag
-- `File` — name, MIME type, size, on‑disk `storedName` (UUID, never exposed to clients), owning user, upload timestamp, and a `deletedAt` marker used for soft delete
+- `Folder` — name, optional parent folder (`null` = root), owning user, `createdAt`, and a `deletedAt` marker used for soft delete
+- `File` — name, MIME type, size, on‑disk `storedName` (UUID, never exposed to clients), optional folder (`null` = root), owning user, upload timestamp, and a `deletedAt` marker used for soft delete
 
-Additional models (Folder, ShareLink) will be added as the project grows.
+The `ShareLink` model will be added later.
+
+After pulling the folder changes, run `npx prisma migrate dev --name folders` to create and apply the migration.
 
 ## Running the Server
 ```bash
@@ -93,11 +100,30 @@ All routes below require the `Authorization: Bearer <token>` header and only eve
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/files` | List the caller's non‑trashed files. |
-| `POST` | `/files` | Upload a file. `multipart/form-data` with a `file` field. Streamed to disk under `FILE_ROOT` with a generated name; the original filename is preserved only for display/download. Returns `{ id, name, size }`. |
+| `GET` | `/files` | List the caller's non‑trashed files. Optional `?folderId=`: `root` for top‑level files, or a folder id. Omitted = all files. |
+| `POST` | `/files` | Upload a file. `multipart/form-data` with a `file` field. Streamed to disk under `FILE_ROOT` with a generated name; the original filename is preserved only for display/download. Optional `folderId` field to upload into a folder (default: root). Returns `{ id, name, size, folderId }`. |
 | `GET` | `/files/:id` | Stream a file back to the client with the correct `Content-Type`, `Content-Disposition` (original filename) and `Content-Length`. |
 | `PATCH` | `/files/:id/rename` | Rename a file. Body: `{ "name": "…" }`. |
+| `PATCH` | `/files/:id/move` | Move a file. Body: `{ "folderId": 12 }` (`null` = root). |
 | `DELETE` | `/files/:id` | Soft‑delete (move to trash). Returns `204 No Content`. |
+
+### Folders
+All routes require the `Authorization: Bearer <token>` header. Folder names must be unique among live siblings (`409` otherwise).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/folders` | List non‑trashed folders. Optional `?parentId=`: `root` for top‑level folders, or a folder id for its direct sub‑folders. Omitted = all folders. |
+| `POST` | `/folders` | Create a folder. Body: `{ "name": "…", "parentId": 3 }` (`parentId` optional). |
+| `PATCH` | `/folders/:id/rename` | Rename a folder. Body: `{ "name": "…" }`. |
+| `PATCH` | `/folders/:id/move` | Move a folder. Body: `{ "parentId": 3 }` (`null` = root). `400` if the destination is the folder itself or one of its descendants. |
+| `DELETE` | `/folders/:id` | Move the folder, its sub‑folders and their files to the trash. Returns `204 No Content`. |
+
+### Trash
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/trash` | List trashed items as `{ files, folders }`. Only top‑level trashed items are listed; contents of a trashed folder come back with it. |
+| `POST` | `/trash/files/:id/restore` | Restore a file. `409` if its parent folder is still trashed. |
+| `POST` | `/trash/folders/:id/restore` | Restore a folder with everything trashed together with it. `409` if its parent is still trashed or a live sibling has the same name. |
 
 See `openapi.yaml` for the full request/response contract.
 
