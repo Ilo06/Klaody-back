@@ -254,6 +254,10 @@ paths:
       description: |
         Without `folderId`, returns every non-trashed file the user owns.
         Use `folderId=root` for the top level only, or a folder id for that folder's direct files.
+        All filters are optional and combine with AND. Empty values are ignored.
+        Date filters are inclusive and accept ISO 8601 (`2026-09-24` or `2026-09-24T10:00:00Z`);
+        a date without a time means 00:00 UTC.
+        Default order: `uploadedAt` descending.
       parameters:
         - name: folderId
           in: query
@@ -262,6 +266,64 @@ paths:
           schema:
             type: string
             pattern: '^(root|[1-9][0-9]*)$'
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive substring match on the file name
+          schema:
+            type: string
+            maxLength: 255
+        - name: mimeType
+          in: query
+          required: false
+          description: Exact MIME type (`application/pdf`) or a wildcard family (`image/*`), case-insensitive
+          schema:
+            type: string
+            maxLength: 255
+        - name: minSize
+          in: query
+          required: false
+          description: Minimum size in bytes (inclusive)
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: maxSize
+          in: query
+          required: false
+          description: Maximum size in bytes (inclusive). Must be >= `minSize`.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: uploadedAfter
+          in: query
+          required: false
+          description: Only files uploaded at or after this date
+          schema:
+            type: string
+            format: date-time
+        - name: uploadedBefore
+          in: query
+          required: false
+          description: Only files uploaded at or before this date
+          schema:
+            type: string
+            format: date-time
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [name, size, uploadedAt]
+            default: uploadedAt
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         '200':
           description: Array of file metadata
@@ -469,9 +531,40 @@ paths:
       summary: List trashed files and folders
       description: |
         Only top-level trashed items are listed: files and folders that were trashed as part of
-        a trashed parent folder come back with that folder and are not listed separately.
+        a trashed parent folder come back with that folder and are not listed separately
+        (filters apply to those top-level items only).
+        All filters are optional and combine with AND. Date filters are inclusive and accept ISO 8601.
       security:
         - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Only list files or only folders
+          schema:
+            type: string
+            enum: [file, folder]
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive substring match on the item name
+          schema:
+            type: string
+            maxLength: 255
+        - name: deletedAfter
+          in: query
+          required: false
+          description: Only items trashed at or after this date
+          schema:
+            type: string
+            format: date-time
+        - name: deletedBefore
+          in: query
+          required: false
+          description: Only items trashed at or before this date
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
           description: Trashed items, most recently deleted first
@@ -488,6 +581,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/FolderMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -659,6 +754,9 @@ paths:
       description: |
         Without `parentId`, returns every non-trashed folder the user owns.
         Use `parentId=root` for the top level only, or a folder id for its direct sub-folders.
+        All filters are optional and combine with AND. Empty values are ignored.
+        Date filters are inclusive and accept ISO 8601.
+        Default order: `name` ascending.
       security:
         - BearerAuth: []
       parameters:
@@ -669,6 +767,41 @@ paths:
           schema:
             type: string
             pattern: '^(root|[1-9][0-9]*)$'
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive substring match on the folder name
+          schema:
+            type: string
+            maxLength: 255
+        - name: createdAfter
+          in: query
+          required: false
+          description: Only folders created at or after this date
+          schema:
+            type: string
+            format: date-time
+        - name: createdBefore
+          in: query
+          required: false
+          description: Only folders created at or before this date
+          schema:
+            type: string
+            format: date-time
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [name, createdAt]
+            default: name
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
       responses:
         '200':
           description: Array of folder metadata, sorted by name

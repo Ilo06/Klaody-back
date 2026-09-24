@@ -8,6 +8,7 @@ import { FILE_ROOT } from '../middleware/upload.middleware';
 import { parseId, parseFolderFilter } from '../utils/parse';
 import { serializeFile } from '../utils/serialize';
 import { getOwnedFolder } from '../utils/folders';
+import { parseFileFilters } from '../utils/filters';
 
 // Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
 export function contentDisposition(name: string): string {
@@ -25,15 +26,15 @@ async function discardUpload(file?: Express.Multer.File) {
 }
 
 // GET /files — list the authenticated user's non-trashed files.
-// Optional ?folderId= filter: "root" (top level) or a folder id. Omitted = all files.
 export async function listFiles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const filter = parseFolderFilter(req.query.folderId);
     if (filter.kind === 'invalid') {
       return res.status(400).json({ error: 'folderId must be a positive integer or "root"' });
     }
+    const { where: filters, orderBy } = parseFileFilters(req.query);
 
-    const where: Prisma.FileWhereInput = { userId: req.userId!, deletedAt: null };
+    const where: Prisma.FileWhereInput = { userId: req.userId!, deletedAt: null, ...filters };
     if (filter.kind === 'root') {
       where.folderId = null;
     } else if (filter.kind === 'id') {
@@ -43,7 +44,7 @@ export async function listFiles(req: AuthenticatedRequest, res: Response, next: 
       where.folderId = filter.id;
     }
 
-    const files = await prisma.file.findMany({ where, orderBy: { uploadedAt: 'desc' } });
+    const files = await prisma.file.findMany({ where, orderBy });
     res.json(files.map(serializeFile));
   } catch (err) {
     next(err);
@@ -51,9 +52,6 @@ export async function listFiles(req: AuthenticatedRequest, res: Response, next: 
 }
 
 // POST /files — upload (multer has already streamed the file to disk).
-// Optional multipart field `folderId` (omitted/empty = root).
-// Note: multipart fields can arrive after the file part, so the folder is validated
-// only once the file is on disk; on any rejection the stored file is removed.
 export async function uploadFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     if (!req.file) {

@@ -4,29 +4,33 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { parseId } from '../utils/parse';
 import { serializeFile, serializeFolder } from '../utils/serialize';
 import { siblingNameTaken, collectSubtreeIds } from '../utils/folders';
+import { parseTrashFilters } from '../utils/filters';
 
 function sameInstant(a: Date | null, b: Date | null): boolean {
   return a !== null && b !== null && a.getTime() === b.getTime();
 }
 
 // GET /trash — list trashed items.
-// Items trashed as part of a folder's batch (same deletedAt as their trashed parent) are hidden:
-// they come back with the folder, so only the top-level trashed items are listed.
 export async function listTrash(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId!;
+    const { type, name, deletedAt } = parseTrashFilters(req.query);
 
     const [files, folders] = await Promise.all([
-      prisma.file.findMany({
-        where: { userId, deletedAt: { not: null } },
-        include: { folder: { select: { deletedAt: true } } },
-        orderBy: { deletedAt: 'desc' },
-      }),
-      prisma.folder.findMany({
-        where: { userId, deletedAt: { not: null } },
-        include: { parent: { select: { deletedAt: true } } },
-        orderBy: { deletedAt: 'desc' },
-      }),
+      type === 'folder'
+        ? []
+        : prisma.file.findMany({
+            where: { userId, deletedAt, ...(name ? { name } : {}) },
+            include: { folder: { select: { deletedAt: true } } },
+            orderBy: { deletedAt: 'desc' },
+          }),
+      type === 'file'
+        ? []
+        : prisma.folder.findMany({
+            where: { userId, deletedAt, ...(name ? { name } : {}) },
+            include: { parent: { select: { deletedAt: true } } },
+            orderBy: { deletedAt: 'desc' },
+          }),
     ]);
 
     res.json({
@@ -70,8 +74,6 @@ export async function restoreFile(req: AuthenticatedRequest, res: Response, next
 }
 
 // POST /trash/folders/:id/restore — restore a folder together with the sub-folders and files
-// that were trashed in the same batch (same deletedAt). Items trashed separately stay in the trash.
-// 409 if the parent is still trashed, or a live sibling already has the same name.
 export async function restoreFolder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId!;

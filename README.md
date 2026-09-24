@@ -100,7 +100,7 @@ All routes below require the `Authorization: Bearer <token>` header and only eve
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/files` | List the caller's non‑trashed files. Optional `?folderId=`: `root` for top‑level files, or a folder id. Omitted = all files. |
+| `GET` | `/files` | List the caller's non‑trashed files. Filters (all optional, combined with AND): `folderId` (`root` or an id; omitted = all), `name` (substring, case‑insensitive), `mimeType` (`application/pdf` or `image/*`), `minSize` / `maxSize` (bytes), `uploadedAfter` / `uploadedBefore` (ISO 8601, inclusive). Sorting: `sortBy` = `name` \| `size` \| `uploadedAt` (default), `order` = `asc` \| `desc` (default). |
 | `POST` | `/files` | Upload a file. `multipart/form-data` with a `file` field. Streamed to disk under `FILE_ROOT` with a generated name; the original filename is preserved only for display/download. Optional `folderId` field to upload into a folder (default: root). Returns `{ id, name, size, folderId }`. |
 | `GET` | `/files/:id` | Stream a file back to the client with the correct `Content-Type`, `Content-Disposition` (original filename) and `Content-Length`. |
 | `PATCH` | `/files/:id/rename` | Rename a file. Body: `{ "name": "…" }`. |
@@ -112,7 +112,7 @@ All routes require the `Authorization: Bearer <token>` header. Folder names must
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/folders` | List non‑trashed folders. Optional `?parentId=`: `root` for top‑level folders, or a folder id for its direct sub‑folders. Omitted = all folders. |
+| `GET` | `/folders` | List non‑trashed folders. Filters: `parentId` (`root` or an id; omitted = all), `name` (substring, case‑insensitive), `createdAfter` / `createdBefore` (ISO 8601, inclusive). Sorting: `sortBy` = `name` (default) \| `createdAt`, `order` = `asc` (default) \| `desc`. |
 | `POST` | `/folders` | Create a folder. Body: `{ "name": "…", "parentId": 3 }` (`parentId` optional). |
 | `PATCH` | `/folders/:id/rename` | Rename a folder. Body: `{ "name": "…" }`. |
 | `PATCH` | `/folders/:id/move` | Move a folder. Body: `{ "parentId": 3 }` (`null` = root). `400` if the destination is the folder itself or one of its descendants. |
@@ -121,11 +121,11 @@ All routes require the `Authorization: Bearer <token>` header. Folder names must
 ### Trash
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/trash` | List trashed items as `{ files, folders }`. Only top‑level trashed items are listed; contents of a trashed folder come back with it. |
+| `GET` | `/trash` | List trashed items as `{ files, folders }`. Only top‑level trashed items are listed; contents of a trashed folder come back with it. Filters: `type` (`file` \| `folder`), `name` (substring), `deletedAfter` / `deletedBefore` (ISO 8601, inclusive). |
 | `POST` | `/trash/files/:id/restore` | Restore a file. `409` if its parent folder is still trashed. |
 | `POST` | `/trash/folders/:id/restore` | Restore a folder with everything trashed together with it. `409` if its parent is still trashed or a live sibling has the same name. |
 
-See `openapi.yaml` for the full request/response contract.
+Invalid filter values return `400 { "error": "…" }`. See `openapi.yaml` for the full request/response contract.
 
 ## Scripts
 - `npm run dev` – start server with `ts-node-dev` (watch mode)

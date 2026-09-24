@@ -4,6 +4,7 @@ import prisma from '../prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { parseId, cleanName, parseFolderFilter } from '../utils/parse';
 import { serializeFolder } from '../utils/serialize';
+import { parseFolderFilters } from '../utils/filters';
 import {
   getOwnedFolder,
   siblingNameTaken,
@@ -47,7 +48,8 @@ export async function createFolder(req: AuthenticatedRequest, res: Response, nex
 }
 
 // GET /folders — list non-trashed folders.
-// Optional ?parentId= filter: "root" (top level) or a folder id. Omitted = all folders.
+// Filters: parentId ("root" or an id; omitted = all), name, createdAfter, createdBefore.
+// Sorting: sortBy (name|createdAt), order. Default: name asc.
 export async function listFolders(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId!;
@@ -56,7 +58,9 @@ export async function listFolders(req: AuthenticatedRequest, res: Response, next
       return res.status(400).json({ error: 'parentId must be a positive integer or "root"' });
     }
 
-    const where: Prisma.FolderWhereInput = { userId, deletedAt: null };
+    const { where: filters, orderBy } = parseFolderFilters(req.query);
+
+    const where: Prisma.FolderWhereInput = { userId, deletedAt: null, ...filters };
     if (filter.kind === 'root') {
       where.parentId = null;
     } else if (filter.kind === 'id') {
@@ -66,7 +70,7 @@ export async function listFolders(req: AuthenticatedRequest, res: Response, next
       where.parentId = filter.id;
     }
 
-    const folders = await prisma.folder.findMany({ where, orderBy: { name: 'asc' } });
+    const folders = await prisma.folder.findMany({ where, orderBy });
     res.json(folders.map(serializeFolder));
   } catch (err) {
     next(err);
@@ -149,8 +153,6 @@ export async function moveFolder(req: AuthenticatedRequest, res: Response, next:
 }
 
 // DELETE /folders/:id — move the folder and everything inside it to the trash.
-// The folder, its live sub-folders and their live files all get the same `deletedAt`,
-// which is what lets a restore bring back exactly that batch (see trash.controller).
 export async function deleteFolder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId!;
