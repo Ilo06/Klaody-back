@@ -98,10 +98,7 @@ export async function restoreFile(userId: number, id: number) {
   return ok(restored);
 }
 
-/**
- * Restores a trashed folder together with the sub-folders and files trashed in the same batch.
- * 409 if the parent is still trashed, or a live sibling already has the same name.
- */
+
 export async function restoreFolder(userId: number, id: number) {
   const folder = await prisma.folder.findFirst({
     where: { id, userId, deletedAt: { not: null } },
@@ -125,7 +122,7 @@ export async function restoreFolder(userId: number, id: number) {
   return ok({ folder: restored, restoredFolderIds: ids });
 }
 
-/** Orders folder ids so that a folder always comes after its parent when both are in the list. */
+//Orders folder ids so that a folder always comes after its parent when both are in the list
 async function parentsFirst(userId: number, ids: number[]): Promise<number[]> {
   const rows = await prisma.folder.findMany({
     where: { userId, id: { in: ids } },
@@ -145,11 +142,6 @@ async function parentsFirst(userId: number, ids: number[]): Promise<number[]> {
   return [...ids].sort((a, b) => depth(a) - depth(b));
 }
 
-/**
- * Bulk restore: every item is attempted, results are reported per item.
- * Folders go first (parents before children), then files. An item that a previously restored
- * folder already brought back in this same request counts as success.
- */
 export async function restoreMany(userId: number, fileIds: number[], folderIds: number[]): Promise<BulkResult> {
   const result: BulkResult = { succeeded: [], failed: [] };
   const restoredFolders = new Set<number>();
@@ -186,20 +178,13 @@ export async function restoreMany(userId: number, fileIds: number[], folderIds: 
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Listing (top-level trashed items)
-// ---------------------------------------------------------------------------
-
 export type TrashFilters = {
   type?: ItemType;
   name?: { contains: string; mode: 'insensitive' };
   deletedAt: { not: null } | { gte?: Date; lte?: Date };
 };
 
-/**
- * Trashed items, most recently deleted first. Items trashed as part of a trashed parent's batch
- * (same deletedAt as the parent) are left out: they come back with the parent.
- */
+
 export async function findTopLevelTrash(
   userId: number,
   { type, name, deletedAt }: TrashFilters = { deletedAt: { not: null } }
@@ -227,7 +212,7 @@ export async function findTopLevelTrash(
   };
 }
 
-/** Restores every top-level trashed item (each one brings back its own batch). */
+// Restores every top-level trashed item (each one brings back its own batch). 
 export async function restoreAll(userId: number): Promise<BulkResult> {
   const { files, folders } = await findTopLevelTrash(userId);
   return restoreMany(
@@ -237,10 +222,7 @@ export async function restoreAll(userId: number): Promise<BulkResult> {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Empty trash (permanent!)
-// ---------------------------------------------------------------------------
-
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -260,10 +242,7 @@ async function removeStoredFiles(storedNames: string[]): Promise<void> {
   }
 }
 
-/**
- * Permanently deletes everything in the user's trash: database rows first, then the files on disk.
- * Not reversible. Returns how many files and folders were removed.
- */
+// Permanently delete everything in trash, clean database first, then the disk
 export async function emptyTrash(userId: number) {
   const { files, folders } = await prisma.$transaction(
     async (tx) => {
@@ -288,7 +267,6 @@ export async function emptyTrash(userId: number) {
   );
 
   // Only touch the disk once the rows are gone, so a failure can leave an orphan
-  // (harmless, logged) but never a database row pointing at a missing file.
   await removeStoredFiles(files.map((f) => f.storedName));
 
   return { deletedFiles: files.length, deletedFolders: folders.length };

@@ -6,9 +6,6 @@ import { parseTrashFilters } from '../utils/filters';
 import * as trash from '../services/trash.service';
 
 // GET /trash — list trashed items.
-// Items trashed as part of a folder's batch (same deletedAt as their trashed parent) are hidden:
-// they come back with the folder, so only the top-level trashed items are listed.
-// Filters: type (file|folder), name, deletedAfter, deletedBefore.
 export async function listTrash(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const filters = parseTrashFilters(req.query);
