@@ -23,7 +23,7 @@ export function contentDisposition(name: string): string {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
-// Removes a file multer already wrote to disk (used when the request is rejected afterwards).
+// Removes a file multer already wrote to disk 
 async function discardUpload(file?: Express.Multer.File) {
   if (file) await fs.promises.unlink(file.path).catch(() => undefined);
 }
