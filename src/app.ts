@@ -7,6 +7,7 @@ import fileRoutes from './routes/file.routes';
 import folderRoutes from './routes/folder.routes';
 import trashRoutes from './routes/trash.routes';
 import shareRoutes from './routes/share.routes';
+import systemRoutes from './routes/system.routes';
 
 dotenv.config();
 
@@ -34,6 +35,9 @@ app.use('/trash', trashRoutes);
 
 // Public share downloads (no auth) — GET /share/:token
 app.use('/share', shareRoutes);
+
+// System routes (disk usage) — GET /storage
+app.use('/storage', systemRoutes);
 
 // Global error handler (basic)
 app.use((err: any, _req: any, res: any, _next: any) => {

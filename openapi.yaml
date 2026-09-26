@@ -217,6 +217,36 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    StorageInfo:
+      type: object
+      required: [totalBytes, freeBytes, availableBytes, reservedBytes, usableBytes, usableGB]
+      properties:
+        totalBytes:
+          type: integer
+          format: int64
+          description: Total size of the filesystem backing FILE_ROOT
+        freeBytes:
+          type: integer
+          format: int64
+          description: Free space including blocks reserved for root
+        availableBytes:
+          type: integer
+          format: int64
+          description: Free space actually usable by this process (statfs bavail)
+        reservedBytes:
+          type: integer
+          format: int64
+          description: Safety margin withheld from availableBytes (10% by default, configurable via STORAGE_RESERVE_RATIO)
+        usableBytes:
+          type: integer
+          format: int64
+          description: availableBytes minus reservedBytes — the figure clients should treat as "free"
+        usableGB:
+          type: number
+          format: float
+          description: usableBytes expressed in GB, rounded to 2 decimals
+
   responses:
     Unauthorized:
       description: Missing or invalid JWT
@@ -1092,3 +1122,30 @@ paths:
               schema:
                 type: string
                 example: OK
+
+  /storage:
+    get:
+      tags: [System]
+      summary: Disk usage for the storage volume, with a safety margin withheld
+      description: |
+        Reads real disk usage for the filesystem backing `FILE_ROOT` and
+        withholds a safety margin (10% of the available space by default)
+        from the reported `usableBytes`, so clients can block uploads
+        before the disk actually fills up.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current disk usage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Could not read disk usage (e.g. statfs unsupported on this platform)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
