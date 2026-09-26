@@ -33,20 +33,30 @@ model Folder {
 }
 
 model File {
-  id         Int       @id @default(autoincrement())
+  id         Int         @id @default(autoincrement())
   name       String
   mimeType   String
   size       BigInt
-  storedName String    @unique // generated filename on disk under FILE_ROOT — never the user-supplied name
-  folderId   Int?      // null = root
-  folder     Folder?   @relation(fields: [folderId], references: [id])
+  storedName String      @unique // generated filename on disk under FILE_ROOT — never the user-supplied name
+  folderId   Int?        // null = root
+  folder     Folder?     @relation(fields: [folderId], references: [id])
   userId     Int
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  uploadedAt DateTime  @default(now())
-  deletedAt  DateTime? // soft delete / trash marker
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uploadedAt DateTime    @default(now())
+  deletedAt  DateTime?   // soft delete / trash marker
+  shareLinks ShareLink[]
 
   @@index([userId])
   @@index([folderId])
 }
 
-// ShareLink will be added later.
+model ShareLink {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique // URL-safe random token, the public identifier in /share/:token
+  fileId    Int
+  file      File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  expiresAt DateTime? // null = never expires
+  createdAt DateTime  @default(now())
+
+  @@index([fileId])
+}
