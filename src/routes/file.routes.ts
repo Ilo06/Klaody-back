@@ -8,6 +8,7 @@ import {
   renameFile,
   moveFile,
   deleteFile,
+  createShare,
 } from '../controllers/file.controller';
 
 const router = Router();
@@ -20,5 +21,6 @@ router.get('/:id', downloadFile);
 router.patch('/:id/rename', renameFile);
 router.patch('/:id/move', moveFile);
 router.delete('/:id', deleteFile);
+router.post('/:id/share', createShare);
 
 export default router;

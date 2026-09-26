@@ -10,6 +10,7 @@ import { serializeFile } from '../utils/serialize';
 import { getOwnedFolder } from '../utils/folders';
 import { parseFileFilters } from '../utils/filters';
 import { trashFile } from '../services/trash.service';
+import { createShareLink } from '../services/share.service';
 
 // Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
 // - `filename` is an ASCII-only fallback for legacy clients
@@ -23,7 +24,7 @@ export function contentDisposition(name: string): string {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
-// Removes a file multer already wrote to disk 
+// Removes a file multer already wrote to disk
 async function discardUpload(file?: Express.Multer.File) {
   if (file) await fs.promises.unlink(file.path).catch(() => undefined);
 }
@@ -203,6 +204,33 @@ export async function deleteFile(req: AuthenticatedRequest, res: Response, next:
     const r = await trashFile(req.userId!, id, new Date());
     if (!r.ok) return res.status(r.status).json({ error: r.error });
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /files/:id/share — body { expiresIn?: number } (seconds; omitted = link never expires)
+export async function createShare(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ error: 'invalid file id' });
+    }
+
+    const rawExpiresIn = (req.body ?? {}).expiresIn;
+    let expiresIn: number | undefined;
+    if (rawExpiresIn !== undefined) {
+      if (typeof rawExpiresIn !== 'number' || !Number.isInteger(rawExpiresIn) || rawExpiresIn <= 0) {
+        return res.status(400).json({ error: 'expiresIn must be a positive integer number of seconds' });
+      }
+      expiresIn = rawExpiresIn;
+    }
+
+    const result = await createShareLink(req.userId!, id, expiresIn);
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+    res.status(201).json({ token: result.token, expiresAt: result.expiresAt });
   } catch (err) {
     next(err);
   }

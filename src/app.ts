@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes';
 import fileRoutes from './routes/file.routes';
 import folderRoutes from './routes/folder.routes';
 import trashRoutes from './routes/trash.routes';
+import shareRoutes from './routes/share.routes';
 
 dotenv.config();
 
@@ -22,7 +23,7 @@ app.get('/healthz', (_req, res) => {
 // Auth routes (register & login)
 app.use('/auth', authRoutes);
 
-// File routes (list, upload, download, rename, move, soft delete)
+// File routes (list, upload, download, rename, move, soft delete, share)
 app.use('/files', fileRoutes);
 
 // Folder routes (create, list, rename, move, soft delete)
@@ -31,7 +32,8 @@ app.use('/folders', folderRoutes);
 // Trash routes (list, restore)
 app.use('/trash', trashRoutes);
 
-// TODO: add other route groups (share)
+// Public share downloads (no auth) — GET /share/:token
+app.use('/share', shareRoutes);
 
 // Global error handler (basic)
 app.use((err: any, _req: any, res: any, _next: any) => {
