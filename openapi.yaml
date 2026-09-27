@@ -74,6 +74,17 @@ components:
           type: integer
           description: Seconds until token expiration (e.g. 604800 for 7 days)
 
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        isAdmin:
+          type: boolean
+
     FileMetadata:
       type: object
       required: [id, name, mimeType, size, folderId, uploadedAt]
@@ -340,6 +351,27 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the authenticated user's profile
+      description: |
+        Returns the current user's id, email and isAdmin flag. Used by
+        clients to decide whether to show admin-only actions.
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          description: Missing or invalid token
           content:
             application/json:
               schema:

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../prisma/client';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 const JWT_EXPIRES_SECONDS = 7 * 24 * 60 * 60; // 7 days, in seconds
@@ -60,6 +61,19 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     const token = generateToken(user.id);
     res.json({ token, expiresIn: JWT_EXPIRES_SECONDS });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function me(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) {
+      return next({ status: 401, message: 'User not found' });
+    }
+
+    res.json({ id: user.id, email: user.email, isAdmin: user.isAdmin });
   } catch (err) {
     next(err);
   }
