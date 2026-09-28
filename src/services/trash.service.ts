@@ -14,8 +14,8 @@ export type Outcome<T> =
   | { ok: false; status: 404 | 409; error: string };
 
 export type BulkResult = {
-  succeeded: { type: ItemType; id: number }[];
-  failed: { type: ItemType; id: number; status: 404 | 409; error: string }[];
+  succeeded: { type: ItemType; id: string }[];
+  failed: { type: ItemType; id: string; status: 404 | 409; error: string }[];
 };
 
 const ok = <T>(value: T): Outcome<T> => ({ ok: true, value });
@@ -34,7 +34,7 @@ function sameInstant(a: Date | null, b: Date | null): boolean {
  * An item already trashed with that very timestamp counts as success: it means an earlier
  * item of the same bulk request (e.g. its parent folder) already took it along.
  */
-export async function trashFile(userId: number, id: number, now: Date): Promise<Outcome<void>> {
+export async function trashFile(userId: string, id: string, now: Date): Promise<Outcome<void>> {
   const file = await prisma.file.findFirst({ where: { id, userId }, select: { id: true, deletedAt: true } });
   if (!file) return fail(404, 'File not found');
   if (file.deletedAt) {
@@ -48,7 +48,7 @@ export async function trashFile(userId: number, id: number, now: Date): Promise<
  * Moves a folder and everything live inside it to the trash. The folder, its live sub-folders
  * and their live files all get the same `deletedAt`, so a restore brings back exactly that batch.
  */
-export async function trashFolder(userId: number, id: number, now: Date): Promise<Outcome<void>> {
+export async function trashFolder(userId: string, id: string, now: Date): Promise<Outcome<void>> {
   const folder = await prisma.folder.findFirst({ where: { id, userId }, select: { id: true, deletedAt: true } });
   if (!folder) return fail(404, 'Folder not found');
   if (folder.deletedAt) {
@@ -64,7 +64,7 @@ export async function trashFolder(userId: number, id: number, now: Date): Promis
 }
 
 /** Bulk version: every item is attempted, results are reported per item. */
-export async function trashMany(userId: number, fileIds: number[], folderIds: number[]): Promise<BulkResult> {
+export async function trashMany(userId: string, fileIds: string[], folderIds: string[]): Promise<BulkResult> {
   const now = new Date(); // shared, so items covered by a parent folder in the same request still succeed
   const result: BulkResult = { succeeded: [], failed: [] };
 
@@ -86,7 +86,7 @@ export async function trashMany(userId: number, fileIds: number[], folderIds: nu
 // ---------------------------------------------------------------------------
 
 /** Restores a trashed file. 409 if its parent folder is still trashed. */
-export async function restoreFile(userId: number, id: number) {
+export async function restoreFile(userId: string, id: string) {
   const file = await prisma.file.findFirst({
     where: { id, userId, deletedAt: { not: null } },
     include: { folder: { select: { deletedAt: true } } },
@@ -99,7 +99,7 @@ export async function restoreFile(userId: number, id: number) {
 }
 
 
-export async function restoreFolder(userId: number, id: number) {
+export async function restoreFolder(userId: string, id: string) {
   const folder = await prisma.folder.findFirst({
     where: { id, userId, deletedAt: { not: null } },
     include: { parent: { select: { deletedAt: true } } },
@@ -123,14 +123,14 @@ export async function restoreFolder(userId: number, id: number) {
 }
 
 //Orders folder ids so that a folder always comes after its parent when both are in the list
-async function parentsFirst(userId: number, ids: number[]): Promise<number[]> {
+async function parentsFirst(userId: string, ids: string[]): Promise<string[]> {
   const rows = await prisma.folder.findMany({
     where: { userId, id: { in: ids } },
     select: { id: true, parentId: true },
   });
   const parentOf = new Map(rows.map((r) => [r.id, r.parentId]));
 
-  const depth = (id: number): number => {
+  const depth = (id: string): number => {
     let d = 0;
     let current = parentOf.get(id) ?? null;
     while (current !== null && parentOf.has(current) && d <= ids.length) {
@@ -142,9 +142,9 @@ async function parentsFirst(userId: number, ids: number[]): Promise<number[]> {
   return [...ids].sort((a, b) => depth(a) - depth(b));
 }
 
-export async function restoreMany(userId: number, fileIds: number[], folderIds: number[]): Promise<BulkResult> {
+export async function restoreMany(userId: string, fileIds: string[], folderIds: string[]): Promise<BulkResult> {
   const result: BulkResult = { succeeded: [], failed: [] };
-  const restoredFolders = new Set<number>();
+  const restoredFolders = new Set<string>();
 
   for (const id of await parentsFirst(userId, folderIds)) {
     const r = await restoreFolder(userId, id);
@@ -186,7 +186,7 @@ export type TrashFilters = {
 
 
 export async function findTopLevelTrash(
-  userId: number,
+  userId: string,
   { type, name, deletedAt }: TrashFilters = { deletedAt: { not: null } }
 ) {
   const [files, folders] = await Promise.all([
@@ -213,7 +213,7 @@ export async function findTopLevelTrash(
 }
 
 // Restores every top-level trashed item (each one brings back its own batch). 
-export async function restoreAll(userId: number): Promise<BulkResult> {
+export async function restoreAll(userId: string): Promise<BulkResult> {
   const { files, folders } = await findTopLevelTrash(userId);
   return restoreMany(
     userId,
@@ -243,7 +243,7 @@ async function removeStoredFiles(storedNames: string[]): Promise<void> {
 }
 
 // Permanently delete everything in trash, clean database first, then the disk
-export async function emptyTrash(userId: number) {
+export async function emptyTrash(userId: string) {
   const { files, folders } = await prisma.$transaction(
     async (tx) => {
       const files = await tx.file.findMany({

@@ -16,7 +16,7 @@ export async function listTrash(req: AuthenticatedRequest, res: Response, next: 
   }
 }
 
-// POST /trash — bulk move to trash. Body { fileIds?: number[], folderIds?: number[] }.
+// POST /trash — bulk move to trash. Body { fileIds?: string[], folderIds?: string[] }.
 // Always 200 for a well-formed request; per-item outcomes are in { succeeded, failed }.
 export async function bulkTrash(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

@@ -21,7 +21,7 @@ export async function createFolder(req: AuthenticatedRequest, res: Response, nex
       return res.status(400).json({ error: 'name is required (1-255 characters)' });
     }
 
-    let parentId: number | null = null;
+    let parentId: string | null = null;
     if (rawParentId !== undefined && rawParentId !== null) {
       parentId = parseId(rawParentId);
       if (parentId === null) {
@@ -51,7 +51,7 @@ export async function listFolders(req: AuthenticatedRequest, res: Response, next
     const userId = req.userId!;
     const filter = parseFolderFilter(req.query.parentId);
     if (filter.kind === 'invalid') {
-      return res.status(400).json({ error: 'parentId must be a positive integer or "root"' });
+      return res.status(400).json({ error: 'parentId must be a valid UUID or "root"' });
     }
 
     const { where: filters, orderBy } = parseFolderFilters(req.query);
@@ -103,7 +103,7 @@ export async function renameFolder(req: AuthenticatedRequest, res: Response, nex
   }
 }
 
-// PATCH /folders/:id/move — body { parentId: number | null } (null = root)
+// PATCH /folders/:id/move — body { parentId: string | null } (null = root)
 export async function moveFolder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId!;

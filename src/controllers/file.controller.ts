@@ -36,7 +36,7 @@ export async function listFiles(req: AuthenticatedRequest, res: Response, next: 
   try {
     const filter = parseFolderFilter(req.query.folderId);
     if (filter.kind === 'invalid') {
-      return res.status(400).json({ error: 'folderId must be a positive integer or "root"' });
+      return res.status(400).json({ error: 'folderId must be a valid UUID or "root"' });
     }
     const { where: filters, orderBy } = parseFileFilters(req.query);
 
@@ -67,7 +67,7 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response, next:
       return res.status(400).json({ error: 'file is required' });
     }
 
-    let folderId: number | null = null;
+    let folderId: string | null = null;
     const rawFolderId = req.body?.folderId;
     if (rawFolderId !== undefined && rawFolderId !== '') {
       folderId = parseId(rawFolderId);
@@ -158,7 +158,7 @@ export async function renameFile(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
-// PATCH /files/:id/move — body { folderId: number | null } (null = root)
+// PATCH /files/:id/move — body { folderId: string | null } (null = root)
 export async function moveFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const id = parseId(req.params.id);

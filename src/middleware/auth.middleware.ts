@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../prisma/client';
+import { isUuid } from '../utils/parse';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 export interface AuthenticatedRequest extends Request {
-  userId?: number;
+  userId?: string;
 }
 
 export function authenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
@@ -19,7 +20,11 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
   }
   const token = parts[1];
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: number };
+    const payload = jwt.verify(token, JWT_SECRET) as { sub: unknown };
+    // Tokens issued before the UUID migration carry a numeric `sub`: reject them so users log in again.
+    if (!isUuid(payload.sub)) {
+      return next({ status: 401, message: 'Invalid or expired token' });
+    }
     req.userId = payload.sub;
     next();
   } catch (err) {
@@ -48,10 +53,13 @@ export async function requireAdminForRegistration(
       return next({ status: 401, message: 'Invalid Authorization format' });
     }
 
-    let payload: { sub: number };
+    let payload: { sub: unknown };
     try {
-      payload = jwt.verify(parts[1], JWT_SECRET) as { sub: number };
+      payload = jwt.verify(parts[1], JWT_SECRET) as { sub: unknown };
     } catch (err) {
+      return next({ status: 401, message: 'Invalid or expired token' });
+    }
+    if (!isUuid(payload.sub)) {
       return next({ status: 401, message: 'Invalid or expired token' });
     }
 

@@ -1,9 +1,9 @@
 export function serializeFile(file: {
-  id: number;
+  id: string;
   name: string;
   mimeType: string;
   size: bigint;
-  folderId: number | null;
+  folderId: string | null;
   uploadedAt: Date;
   deletedAt: Date | null;
 }) {
@@ -19,9 +19,9 @@ export function serializeFile(file: {
 }
 
 export function serializeFolder(folder: {
-  id: number;
+  id: string;
   name: string;
-  parentId: number | null;
+  parentId: string | null;
   createdAt: Date;
   deletedAt: Date | null;
 }) {

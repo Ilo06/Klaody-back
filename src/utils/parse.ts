@@ -1,10 +1,16 @@
 // Small input-parsing helpers shared by the controllers.
 import { HttpError } from './errors';
 
-/** Parses a positive integer id from a route/query/body value. Returns null if invalid. */
-export function parseId(raw: unknown): number | null {
-  const id = typeof raw === 'string' ? Number(raw) : typeof raw === 'number' ? raw : NaN;
-  return Number.isInteger(id) && id > 0 ? id : null;
+/** Canonical UUID (v1–v8). Postgres rejects malformed uuids, so every id is checked before it reaches Prisma. */
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(raw: unknown): raw is string {
+  return typeof raw === 'string' && UUID_REGEX.test(raw);
+}
+
+/** Parses a UUID id from a route/query/body value (normalised to lower case). Returns null if invalid. */
+export function parseId(raw: unknown): string | null {
+  return isUuid(raw) ? raw.toLowerCase() : null;
 }
 
 /** Trims and validates a file/folder name (1–255 chars). Returns null if invalid. */
@@ -18,12 +24,12 @@ export function cleanName(raw: unknown): string | null {
  * Interprets the `folderId` / `parentId` query filter:
  *  - absent   -> everything (no filter)
  *  - "root"   -> top level only
- *  - integer  -> that folder's direct children
+ *  - UUID     -> that folder's direct children
  */
 export type FolderFilter =
   | { kind: 'all' }
   | { kind: 'root' }
-  | { kind: 'id'; id: number }
+  | { kind: 'id'; id: string }
   | { kind: 'invalid' };
 
 export function parseFolderFilter(raw: unknown): FolderFilter {
@@ -36,19 +42,19 @@ export function parseFolderFilter(raw: unknown): FolderFilter {
 /** Max number of ids accepted by one bulk request (files + folders combined). */
 export const MAX_BULK_IDS = 1000;
 
-/** Parses `{ fileIds?: number[], folderIds?: number[] }`; ids are de-duplicated. */
-export function parseBulkIds(body: unknown): { fileIds: number[]; folderIds: number[] } {
+/** Parses `{ fileIds?: string[], folderIds?: string[] }`; ids are de-duplicated. */
+export function parseBulkIds(body: unknown): { fileIds: string[]; folderIds: string[] } {
   const b = (body ?? {}) as Record<string, unknown>;
 
-  const read = (key: 'fileIds' | 'folderIds'): number[] => {
+  const read = (key: 'fileIds' | 'folderIds'): string[] => {
     const raw = b[key];
     if (raw === undefined) return [];
     if (!Array.isArray(raw)) throw new HttpError(400, `${key} must be an array of ids`);
-    const ids = raw.map((v) => (typeof v === 'number' ? parseId(v) : null));
+    const ids = raw.map((v) => parseId(v));
     if (ids.some((id) => id === null)) {
-      throw new HttpError(400, `${key} must only contain positive integers`);
+      throw new HttpError(400, `${key} must only contain valid UUIDs`);
     }
-    return [...new Set(ids as number[])];
+    return [...new Set(ids as string[])];
   };
 
   const fileIds = read('fileIds');

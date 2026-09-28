@@ -78,7 +78,8 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         email:
           type: string
           format: email
@@ -90,7 +91,8 @@ components:
       required: [id, name, mimeType, size, folderId, uploadedAt]
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         name:
           type: string
         mimeType:
@@ -99,7 +101,8 @@ components:
           type: integer
           format: int64
         folderId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
           description: Containing folder, or null when the file is at the root
         uploadedAt:
@@ -115,14 +118,16 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         name:
           type: string
         size:
           type: integer
           format: int64
         folderId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
 
     ErrorResponse:
@@ -140,13 +145,13 @@ components:
         fileIds:
           type: array
           items:
-            type: integer
-            minimum: 1
+            type: string
+            format: uuid
         folderIds:
           type: array
           items:
-            type: integer
-            minimum: 1
+            type: string
+            format: uuid
 
     BulkItemRef:
       type: object
@@ -156,7 +161,8 @@ components:
           type: string
           enum: [file, folder]
         id:
-          type: integer
+          type: string
+          format: uuid
 
     BulkFailure:
       type: object
@@ -166,7 +172,8 @@ components:
           type: string
           enum: [file, folder]
         id:
-          type: integer
+          type: string
+          format: uuid
         status:
           type: integer
           enum: [404, 409]
@@ -204,11 +211,13 @@ components:
       required: [id, name, parentId, createdAt]
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         name:
           type: string
         parentId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
           description: Parent folder, or null when the folder is at the root
         createdAt:
@@ -395,7 +404,7 @@ paths:
           description: '`root` for top-level files, or a folder id. Omit for all files.'
           schema:
             type: string
-            pattern: '^(root|[1-9][0-9]*)$'
+            pattern: '^(root|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$'
         - name: name
           in: query
           required: false
@@ -485,7 +494,8 @@ paths:
                   format: binary
                   description: The file to upload
                 folderId:
-                  type: integer
+                  type: string
+                  format: uuid
                   description: Destination folder. Omit (or leave empty) for the root.
       responses:
         '201':
@@ -510,7 +520,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '200':
           description: File stream
@@ -540,7 +551,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '204':
           description: File moved to trash
@@ -560,7 +572,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -596,7 +609,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -644,7 +658,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '204':
           description: Folder moved to trash
@@ -819,7 +834,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '200':
           description: File restored
@@ -854,7 +870,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         '200':
           description: Folder restored
@@ -886,7 +903,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -896,7 +914,8 @@ paths:
               required: [folderId]
               properties:
                 folderId:
-                  type: integer
+                  type: string
+                  format: uuid
                   nullable: true
                   description: Destination folder, or null for the root
       responses:
@@ -928,7 +947,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -938,7 +958,8 @@ paths:
               required: [parentId]
               properties:
                 parentId:
-                  type: integer
+                  type: string
+                  format: uuid
                   nullable: true
                   description: Destination folder, or null for the root
       responses:
@@ -988,7 +1009,7 @@ paths:
           description: '`root` for top-level folders, or a folder id. Omit for all folders.'
           schema:
             type: string
-            pattern: '^(root|[1-9][0-9]*)$'
+            pattern: '^(root|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$'
         - name: name
           in: query
           required: false
@@ -1057,7 +1078,8 @@ paths:
                   minLength: 1
                   maxLength: 255
                 parentId:
-                  type: integer
+                  type: string
+                  format: uuid
                   nullable: true
                   description: Parent folder. Omit or null for the root.
       responses:
@@ -1091,7 +1113,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       requestBody:
         required: false
         content:

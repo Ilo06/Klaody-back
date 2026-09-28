@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 const JWT_EXPIRES_SECONDS = 7 * 24 * 60 * 60; // 7 days, in seconds
 
-function generateToken(userId: number) {
+function generateToken(userId: string) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_SECONDS });
 }
 

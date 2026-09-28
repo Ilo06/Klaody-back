@@ -15,8 +15,8 @@ export type CreateShareResult =
 
 
 export async function createShareLink(
-  userId: number,
-  fileId: number,
+  userId: string,
+  fileId: string,
   expiresIn?: number
 ): Promise<CreateShareResult> {
   const file = await prisma.file.findFirst({
