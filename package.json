@@ -8,18 +8,21 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "index:backfill": "ts-node --transpile-only src/scripts/backfill-index.ts"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@prisma/client": "5.22.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "pg-boss": "^10.4.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
@@ -29,6 +32,7 @@
     "@types/multer": "^1.4.11",
     "@types/node": "^20.12.7",
     "prisma": "5.22.0",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"
   }
