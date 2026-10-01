@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum IndexStatus {
+  NONE    // not an indexable image (or too large)
+  PENDING // queued for CLIP embedding
+  DONE    // embedding stored, searchable
+  FAILED  // gave up after retries; re-run the backfill script to retry
+}
+
 model User {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String   @unique
@@ -45,6 +52,8 @@ model File {
   uploadedAt DateTime    @default(now())
   deletedAt  DateTime?   // soft delete / trash marker
   shareLinks ShareLink[]
+  indexStatus IndexStatus @default(NONE) // CLIP indexing state, images only
+  embedding   ImageEmbedding?
 
   @@index([userId])
   @@index([folderId])
@@ -59,4 +68,14 @@ model ShareLink {
   createdAt DateTime  @default(now())
 
   @@index([fileId])
+}
+
+// CLIP image embedding used by GET /files/search.
+// Written and queried with raw SQL only (Prisma cannot read/write pgvector columns natively).
+model ImageEmbedding {
+  fileId    String   @id @db.Uuid
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  embedding Unsupported("vector(512)")
+  model     String
+  createdAt DateTime @default(now())
 }

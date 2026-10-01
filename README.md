@@ -142,3 +142,13 @@ Invalid filter values return `400 { "error": "…" }`. See `openapi.yaml` for th
 
 ## License
 MIT © RANDRIANASOLO Iloniaina Tohifitahiana
+
+## Image search (CLIP + pgvector)
+
+`GET /files/search?q=car` returns the images that *show* a car, whatever their file name.
+
+- On upload, every supported image (jpeg, png, webp, gif, avif, tiff, up to `INDEX_MAX_BYTES`) is queued in a Postgres-backed job queue (pg-boss, `pgboss` schema, no Redis). A worker embeds it with CLIP (ViT-B/32, run locally through transformers.js) and stores a 512-dim vector in pgvector.
+- Search embeds the text query with the same model and ranks images by cosine similarity. Results include a `similarity` score; hits below `SEARCH_MIN_SIMILARITY` (default 0.2) are dropped.
+- `indexStatus` on a file: `NONE` (not indexable) → `PENDING` → `DONE` / `FAILED`.
+- Existing images: run `npm run index:backfill` once (prod: `node dist/scripts/backfill-index.js`).
+- Requirements: PostgreSQL with the `vector` extension (the migration runs `CREATE EXTENSION IF NOT EXISTS vector`), and a direct DB connection for pg-boss (`PGBOSS_DATABASE_URL` if `DATABASE_URL` is pooled). The first start downloads ~150 MB of model weights (see `CLIP_CACHE_DIR`).

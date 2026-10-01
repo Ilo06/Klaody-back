@@ -113,6 +113,25 @@ components:
           format: date-time
           nullable: true
           description: Set when the file is in the trash, null otherwise
+        indexStatus:
+          $ref: '#/components/schemas/IndexStatus'
+
+    IndexStatus:
+      type: string
+      enum: [NONE, PENDING, DONE, FAILED]
+      description: |
+        State of the background CLIP indexing used by `GET /files/search`.
+        `NONE` = not an indexable image, `PENDING` = queued, `DONE` = searchable, `FAILED` = gave up after retries.
+
+    ImageSearchResult:
+      allOf:
+        - $ref: '#/components/schemas/FileMetadata'
+        - type: object
+          required: [similarity]
+          properties:
+            similarity:
+              type: number
+              description: Cosine similarity between the query and the image (higher = closer). Typical matches score ~0.22-0.32.
 
     FileUploadResponse:
       type: object
@@ -129,6 +148,8 @@ components:
           type: string
           format: uuid
           nullable: true
+        indexStatus:
+          $ref: '#/components/schemas/IndexStatus'
 
     ErrorResponse:
       type: object
@@ -510,6 +531,58 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /files/search:
+    get:
+      tags: [Files]
+      summary: Search images by what they show (semantic search)
+      description: |
+        Text-to-image search powered by CLIP embeddings stored in pgvector. `q=car` returns images that
+        contain a car even if the file name says nothing about it; any word or short phrase works
+        ("beach", "receipt", "cat on a sofa").
+        Only the caller's non-trashed images whose `indexStatus` is `DONE` are searched; newly uploaded
+        images become searchable once the background indexing job has run (usually a few seconds).
+        Results are ordered by similarity, best first.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What to look for
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: minSimilarity
+          in: query
+          required: false
+          description: Minimum cosine similarity for a hit (default from `SEARCH_MIN_SIMILARITY`, 0.2). Raise it for stricter results.
+          schema:
+            type: number
+            minimum: -1
+            maximum: 1
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Matching images, best match first (empty array when nothing is similar enough)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImageSearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /files/{id}:
     get:

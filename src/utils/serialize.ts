@@ -6,6 +6,7 @@ export function serializeFile(file: {
   folderId: string | null;
   uploadedAt: Date;
   deletedAt: Date | null;
+  indexStatus?: string;
 }) {
   return {
     id: file.id,
@@ -15,6 +16,7 @@ export function serializeFile(file: {
     folderId: file.folderId,
     uploadedAt: file.uploadedAt,
     deletedAt: file.deletedAt,
+    ...(file.indexStatus !== undefined ? { indexStatus: file.indexStatus } : {}),
   };
 }
 

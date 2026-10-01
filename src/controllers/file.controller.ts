@@ -11,6 +11,8 @@ import { getOwnedFolder } from '../utils/folders';
 import { parseFileFilters } from '../utils/filters';
 import { trashFile } from '../services/trash.service';
 import { createShareLink } from '../services/share.service';
+import { enqueueIndexing, isIndexable } from '../services/indexing.service';
+import { searchImages, DEFAULT_MIN_SIMILARITY } from '../services/image-search.service';
 
 // Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
 // - `filename` is an ASCII-only fallback for legacy clients
@@ -57,6 +59,37 @@ export async function listFiles(req: AuthenticatedRequest, res: Response, next: 
   }
 }
 
+// GET /files/search?q=car[&limit=20][&minSimilarity=0.2] — semantic image search (CLIP + pgvector).
+export async function searchFiles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q === '' || q.length > 200) {
+      return res.status(400).json({ error: 'q is required (1-200 characters)' });
+    }
+
+    let limit = 20;
+    if (req.query.limit !== undefined) {
+      limit = Number(req.query.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ error: 'limit must be an integer between 1 and 100' });
+      }
+    }
+
+    let minSimilarity = DEFAULT_MIN_SIMILARITY;
+    if (req.query.minSimilarity !== undefined) {
+      minSimilarity = Number(req.query.minSimilarity);
+      if (!Number.isFinite(minSimilarity) || minSimilarity < -1 || minSimilarity > 1) {
+        return res.status(400).json({ error: 'minSimilarity must be a number between -1 and 1' });
+      }
+    }
+
+    const results = await searchImages(req.userId!, q, limit, minSimilarity);
+    res.json(results.map(({ file, similarity }) => ({ ...serializeFile(file), similarity })));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // POST /files — upload (multer has already streamed the file to disk).
 // Optional multipart field `folderId` (omitted/empty = root).
 // Note: multipart fields can arrive after the file part, so the folder is validated
@@ -81,18 +114,34 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response, next:
       }
     }
 
+    const mimeType = req.file.mimetype || 'application/octet-stream';
+    const indexable = isIndexable(mimeType, req.file.size);
+
     const file = await prisma.file.create({
       data: {
         name: req.file.originalname,
-        mimeType: req.file.mimetype || 'application/octet-stream',
+        mimeType,
         size: BigInt(req.file.size),
         storedName: req.file.filename,
         folderId,
         userId: req.userId!,
+        indexStatus: indexable ? 'PENDING' : 'NONE',
       },
     });
 
-    res.status(201).json({ id: file.id, name: file.name, size: Number(file.size), folderId: file.folderId });
+    // Queue the CLIP indexing in the background
+    let indexStatus: string = file.indexStatus;
+    if (indexable) {
+      try {
+        await enqueueIndexing(file.id);
+      } catch (queueErr) {
+        console.error(`[indexing] could not queue file ${file.id}:`, queueErr);
+        await prisma.file.update({ where: { id: file.id }, data: { indexStatus: 'FAILED' } }).catch(() => undefined);
+        indexStatus = 'FAILED';
+      }
+    }
+
+    res.status(201).json({ id: file.id, name: file.name, size: Number(file.size), folderId: file.folderId, indexStatus });
   } catch (err) {
     await discardUpload(req.file); // don't leave an orphan on disk if the DB insert failed
     next(err);
