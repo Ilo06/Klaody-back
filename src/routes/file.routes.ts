@@ -6,6 +6,7 @@ import {
   searchFiles,
   uploadFile,
   downloadFile,
+  previewFile,
   renameFile,
   moveFile,
   deleteFile,
@@ -20,6 +21,7 @@ router.get('/', listFiles);
 router.get('/search', searchFiles); // must stay before '/:id'
 router.post('/', upload.single('file'), uploadFile);
 router.get('/:id', downloadFile);
+router.get('/:id/preview', previewFile); // reduced-size copy of an image (the download stays full resolution)
 router.patch('/:id/rename', renameFile);
 router.patch('/:id/move', moveFile);
 router.delete('/:id', deleteFile);

@@ -3,6 +3,7 @@ import path from 'path';
 import prisma from '../prisma/client';
 import { FILE_ROOT } from '../middleware/upload.middleware';
 import { siblingNameTaken, collectSubtreeIds } from '../utils/folders';
+import { removePreviews } from './preview.service';
 
 // Trash logic shared by the single-item routes (DELETE /files/:id, POST /trash/files/:id/restore, …)
 // and the bulk routes (POST /trash, POST /trash/restore, POST /trash/restore-all, DELETE /trash).
@@ -268,6 +269,7 @@ export async function emptyTrash(userId: string) {
 
   // Only touch the disk once the rows are gone, so a failure can leave an orphan
   await removeStoredFiles(files.map((f) => f.storedName));
+  await removePreviews(files.map((f) => f.id)); // cached reduced-size previews
 
   return { deletedFiles: files.length, deletedFolders: folders.length };
 }

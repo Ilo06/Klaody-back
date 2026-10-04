@@ -13,6 +13,8 @@ import { trashFile } from '../services/trash.service';
 import { createShareLink } from '../services/share.service';
 import { enqueueIndexing, isIndexable } from '../services/indexing.service';
 import { searchImages, DEFAULT_MIN_SIMILARITY } from '../services/image-search.service';
+import { DEFAULT_PREVIEW_WIDTH, getPreview, isPreviewable, snapPreviewWidth } from '../services/preview.service';
+import { HttpError } from '../utils/errors';
 
 // Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
 // - `filename` is an ASCII-only fallback for legacy clients
@@ -173,6 +175,58 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
     res.setHeader('Content-Length', file.size.toString());
 
     const stream = fs.createReadStream(filePath);
+    stream.on('error', (err) => next(err));
+    stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /files/:id/preview[?width=720] — reduced-size WebP copy of an image, for in-app previews.
+// `width` is snapped up to a fixed bucket (480 | 720 | 1080 | 1600, default 1080); images are never upscaled.
+// GET /files/:id remains the way to get the original, full-resolution file.
+export async function previewFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ error: 'invalid file id' });
+    }
+
+    let width = DEFAULT_PREVIEW_WIDTH;
+    if (req.query.width !== undefined) {
+      const requested = Number(req.query.width);
+      if (!Number.isInteger(requested) || requested < 1) {
+        return res.status(400).json({ error: 'width must be a positive integer' });
+      }
+      width = snapPreviewWidth(requested);
+    }
+
+    const file = await prisma.file.findFirst({
+      where: { id, userId: req.userId!, deletedAt: null },
+    });
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (!isPreviewable(file.mimeType)) {
+      return res.status(415).json({ error: 'No preview for this file type, download it instead' });
+    }
+    if (!fs.existsSync(path.join(FILE_ROOT, file.storedName))) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    let preview: { path: string; size: number };
+    try {
+      preview = await getPreview(file.id, file.storedName, width);
+    } catch (err) {
+      console.error(`[preview] could not resize file ${file.id}:`, err);
+      return next(new HttpError(422, 'Could not generate a preview for this image'));
+    }
+
+    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Length', preview.size.toString());
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+
+    const stream = fs.createReadStream(preview.path);
     stream.on('error', (err) => next(err));
     stream.pipe(res);
   } catch (err) {

@@ -634,6 +634,59 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /files/{id}/preview:
+    get:
+      tags: [Files]
+      summary: Reduced-size preview of an image
+      description: |
+        Returns a WebP copy of a JPEG, PNG, WebP or AVIF image, resized server-side so that the in-app
+        preview loads quickly on slow or mobile connections. Images are never upscaled. Previews are
+        generated on first request and cached on disk, and are removed when the file is permanently deleted.
+        The original, full-resolution file is still returned by `GET /files/{id}`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: width
+          in: query
+          required: false
+          description: Wanted width in pixels. Snapped up to the next available size (480, 720, 1080 or 1600).
+          schema:
+            type: integer
+            minimum: 1
+            default: 1080
+      responses:
+        '200':
+          description: WebP image
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '415':
+          description: This file type has no preview (use `GET /files/{id}` to download it)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The image could not be decoded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /files/{id}/rename:
     patch:
       tags: [Files]
