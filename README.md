@@ -15,6 +15,8 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
   - [Files](#files)
   - [Folders](#folders)
   - [Trash](#trash)
+- [Image search (CLIP + pgvector)](#image-search-clip--pgvector)
+- [Deployment](#deployment)
 - [Scripts](#scripts)
 - [License](#license)
 
@@ -144,6 +146,10 @@ Invalid filter values return `400 { "error": "…" }`. See `openapi.yaml` for th
 - Existing images: run `npm run index:backfill` once (prod: `node dist/scripts/backfill-index.js`).
 - Requirements: PostgreSQL with the `vector` extension (the migration runs `CREATE EXTENSION IF NOT EXISTS vector`), and a direct DB connection for pg-boss (`PGBOSS_DATABASE_URL` if `DATABASE_URL` is pooled). The first start downloads ~150 MB of model weights (see `CLIP_CACHE_DIR`).
 
+## Deployment
+
+See [installation.md](installation.md) for the full step-by-step guide to install and deploy the backend on an Ubuntu VM (PostgreSQL + pgvector, Node.js, PM2, firewall, Nginx + HTTPS).
+
 ## Scripts
 - `npm run dev` – start server with `ts-node-dev` (watch mode)
 - `npm run build` – compile TypeScript to `dist/`
@@ -153,4 +159,3 @@ Invalid filter values return `400 { "error": "…" }`. See `openapi.yaml` for th
 
 ## License
 MIT © RANDRIANASOLO Iloniaina Tohifitahiana
-
