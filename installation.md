@@ -222,3 +222,39 @@ sudo iptables -L INPUT -n --line-numbers   # ACCEPT 80/443 before the REJECT (se
 Also check the **ingress** rules for TCP 80 and 443 in your cloud provider's console. Test from outside the VM: `curl -I http://<subdomain>.duckdns.org`.
 
 > `curl https://<subdomain>.duckdns.org` (without a path) returns `Cannot GET /`. This is expected: HTTPS and the nginx proxy work, the API simply has no `/` route. Use `/healthz` or another real route.
+
+## 8. Create the first (admin) account
+
+The first account ever registered requires no authentication and is automatically made admin. Do it right after the API is exposed, because until then anyone who finds the URL could claim the admin account.
+
+```bash
+curl -X POST 'https://<subdomain>.duckdns.org/auth/register' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "<admin-email>",
+    "password": "<strong-password>"
+  }'
+```
+
+The response is `{ "token": "...", "expiresIn": ... }`.
+
+Every subsequent call to `/auth/register` requires the admin token in the `Authorization` header, and may set `isAdmin` on the new account:
+
+```bash
+curl -X POST 'https://<subdomain>.duckdns.org/auth/register' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <admin-token>' \
+  -d '{
+    "email": "<user-email>",
+    "password": "<user-password>"
+  }'
+```
+
+To get a new token later, log in:
+
+```bash
+curl -X POST 'https://<subdomain>.duckdns.org/auth/login' \
+  -H 'Content-Type: application/json' \
+  -d '{ "email": "<admin-email>", "password": "<strong-password>" }'
+```
