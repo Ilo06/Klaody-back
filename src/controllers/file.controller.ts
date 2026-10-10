@@ -183,7 +183,7 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
 }
 
 // GET /files/:id/preview[?width=720] — reduced-size WebP copy of an image, for in-app previews.
-// `width` is snapped up to a fixed bucket (480 | 720 | 1080 | 1600, default 1080); images are never upscaled.
+// `width` is snapped up to a fixed bucket (240 | 360 | 480 | 720 | 1080 | 1600, default 1080); images are never upscaled.
 // GET /files/:id remains the way to get the original, full-resolution file.
 export async function previewFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

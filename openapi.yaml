@@ -655,7 +655,7 @@ paths:
         - name: width
           in: query
           required: false
-          description: Wanted width in pixels. Snapped up to the next available size (480, 720, 1080 or 1600).
+          description: Wanted width in pixels. Snapped up to the next available size (240, 360, 480, 720, 1080 or 1600). 240 and 360 are thumbnail sizes, compressed harder.
           schema:
             type: integer
             minimum: 1

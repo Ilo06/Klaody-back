@@ -7,9 +7,12 @@ import { FILE_ROOT } from '../middleware/upload.middleware';
 // The original file is never modified: GET /files/:id keeps returning it at full resolution.
 // Previews are generated on first request and cached on disk under FILE_ROOT/.previews.
 
-export const PREVIEW_WIDTHS = [480, 720, 1080, 1600] as const; // buckets keep the cache small and reusable
+// 240 / 360 are thumbnail sizes (search result grid); the rest are for the full-screen preview.
+export const PREVIEW_WIDTHS = [240, 360, 480, 720, 1080, 1600] as const; // buckets keep the cache small and reusable
 export const DEFAULT_PREVIEW_WIDTH = 1080;
 const PREVIEW_QUALITY = 75;
+const THUMBNAIL_MAX_WIDTH = 360; // thumbnails are tiny on screen, so they can be compressed harder
+const THUMBNAIL_QUALITY = 60;
 const PREVIEW_DIR = path.join(FILE_ROOT, '.previews');
 
 // GIF (animation) and SVG (vector) would lose something by being re-encoded; HEIC/RAW are not
@@ -39,7 +42,7 @@ async function generate(source: string, target: string, width: number): Promise<
     await sharp(source, { failOn: 'none' })
       .rotate() // applies the EXIF orientation (the re-encoded WebP carries no metadata)
       .resize({ width, withoutEnlargement: true })
-      .webp({ quality: PREVIEW_QUALITY })
+      .webp({ quality: width <= THUMBNAIL_MAX_WIDTH ? THUMBNAIL_QUALITY : PREVIEW_QUALITY })
       .toFile(tmp);
     await fs.promises.rename(tmp, target);
   } catch (err) {

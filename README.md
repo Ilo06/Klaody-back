@@ -15,8 +15,6 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
   - [Files](#files)
   - [Folders](#folders)
   - [Trash](#trash)
-- [Image search (CLIP + pgvector)](#image-search-clip--pgvector)
-- [Deployment](#deployment)
 - [Scripts](#scripts)
 - [License](#license)
 
@@ -107,7 +105,7 @@ All routes below require the `Authorization: Bearer <token>` header and only eve
 | `GET` | `/files` | List the caller's non‑trashed files. Filters (all optional, combined with AND): `folderId` (`root` or a UUID; omitted = all), `name` (substring, case‑insensitive), `mimeType` (`application/pdf` or `image/*`), `minSize` / `maxSize` (bytes), `uploadedAfter` / `uploadedBefore` (ISO 8601, inclusive). Sorting: `sortBy` = `name` \| `size` \| `uploadedAt` (default), `order` = `asc` \| `desc` (default). |
 | `POST` | `/files` | Upload a file. `multipart/form-data` with a `file` field. Streamed to disk under `FILE_ROOT` with a generated name; the original filename is preserved only for display/download. Optional `folderId` field to upload into a folder (default: root). Returns `{ id, name, size, folderId }`. |
 | `GET` | `/files/:id` | Stream a file back to the client with the correct `Content-Type`, `Content-Disposition` (original filename) and `Content-Length`. |
-| `GET` | `/files/:id/preview` | Reduced-size WebP copy of an image (JPEG, PNG, WebP, AVIF) for in-app previews. Optional `width` (px), snapped up to 480 / 720 / 1080 / 1600 (default 1080); never upscaled. Generated with `sharp` on first request and cached under `FILE_ROOT/.previews`. `415` for other file types, `422` if the image cannot be decoded. The original stays available, at full resolution, through `GET /files/:id`. |
+| `GET` | `/files/:id/preview` | Reduced-size WebP copy of an image (JPEG, PNG, WebP, AVIF) for in-app previews. Optional `width` (px), snapped up to 240 / 360 / 480 / 720 / 1080 / 1600 (default 1080; 240 and 360 are thumbnail sizes); never upscaled. Generated with `sharp` on first request and cached under `FILE_ROOT/.previews`. `415` for other file types, `422` if the image cannot be decoded. The original stays available, at full resolution, through `GET /files/:id`. |
 | `PATCH` | `/files/:id/rename` | Rename a file. Body: `{ "name": "…" }`. |
 | `PATCH` | `/files/:id/move` | Move a file. Body: `{ "folderId": "<uuid>" }` (`null` = root). |
 | `DELETE` | `/files/:id` | Soft‑delete (move to trash). Returns `204 No Content`. |
@@ -136,20 +134,6 @@ All routes require the `Authorization: Bearer <token>` header. Folder names must
 
 Invalid filter values return `400 { "error": "…" }`. See `openapi.yaml` for the full request/response contract.
 
-## Image search (CLIP + pgvector)
-
-`GET /files/search?q=car` returns the images that *show* a car, whatever their file name.
-
-- On upload, every supported image (jpeg, png, webp, gif, avif, tiff, up to `INDEX_MAX_BYTES`) is queued in a Postgres-backed job queue (pg-boss, `pgboss` schema, no Redis). A worker embeds it with CLIP (ViT-B/32, run locally through transformers.js) and stores a 512-dim vector in pgvector.
-- Search embeds the text query with the same model and ranks images by cosine similarity. Results include a `similarity` score; hits below `SEARCH_MIN_SIMILARITY` (default 0.2) are dropped.
-- `indexStatus` on a file: `NONE` (not indexable) → `PENDING` → `DONE` / `FAILED`.
-- Existing images: run `npm run index:backfill` once (prod: `node dist/scripts/backfill-index.js`).
-- Requirements: PostgreSQL with the `vector` extension (the migration runs `CREATE EXTENSION IF NOT EXISTS vector`), and a direct DB connection for pg-boss (`PGBOSS_DATABASE_URL` if `DATABASE_URL` is pooled). The first start downloads ~150 MB of model weights (see `CLIP_CACHE_DIR`).
-
-## Deployment
-
-See [installation.md](installation.md) for the full step-by-step guide to install and deploy the backend on an Ubuntu VM (PostgreSQL + pgvector, Node.js, PM2, firewall, Nginx + HTTPS).
-
 ## Scripts
 - `npm run dev` – start server with `ts-node-dev` (watch mode)
 - `npm run build` – compile TypeScript to `dist/`
@@ -159,3 +143,13 @@ See [installation.md](installation.md) for the full step-by-step guide to instal
 
 ## License
 MIT © RANDRIANASOLO Iloniaina Tohifitahiana
+
+## Image search (CLIP + pgvector)
+
+`GET /files/search?q=car` returns the images that *show* a car, whatever their file name.
+
+- On upload, every supported image (jpeg, png, webp, gif, avif, tiff, up to `INDEX_MAX_BYTES`) is queued in a Postgres-backed job queue (pg-boss, `pgboss` schema, no Redis). A worker embeds it with CLIP (ViT-B/32, run locally through transformers.js) and stores a 512-dim vector in pgvector.
+- Search embeds the text query with the same model and ranks images by cosine similarity. Results include a `similarity` score; hits below `SEARCH_MIN_SIMILARITY` (default 0.2) are dropped.
+- `indexStatus` on a file: `NONE` (not indexable) → `PENDING` → `DONE` / `FAILED`.
+- Existing images: run `npm run index:backfill` once (prod: `node dist/scripts/backfill-index.js`).
+- Requirements: PostgreSQL with the `vector` extension (the migration runs `CREATE EXTENSION IF NOT EXISTS vector`), and a direct DB connection for pg-boss (`PGBOSS_DATABASE_URL` if `DATABASE_URL` is pooled). The first start downloads ~150 MB of model weights (see `CLIP_CACHE_DIR`).
