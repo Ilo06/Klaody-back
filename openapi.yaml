@@ -288,6 +288,54 @@ components:
           format: float
           description: usableBytes expressed in GB, rounded to 2 decimals
 
+    StorageBreakdownCategory:
+      type: object
+      required: [key, label, bytes, count, percentage]
+      properties:
+        key:
+          type: string
+          enum: [images, videos, audio, pdf, documents, archives, other]
+        label:
+          type: string
+          example: Images
+        bytes:
+          type: integer
+          format: int64
+          description: Total size of the caller's non-trashed files of this type
+        count:
+          type: integer
+          description: Number of non-trashed files of this type
+        percentage:
+          type: number
+          format: float
+          description: Share of the caller's total non-trashed bytes (0-100, one decimal)
+
+    StorageBreakdown:
+      type: object
+      required: [totalBytes, totalFiles, categories, trash]
+      properties:
+        totalBytes:
+          type: integer
+          format: int64
+          description: Total size of the caller's non-trashed files (the 100% base of the percentages)
+        totalFiles:
+          type: integer
+        categories:
+          type: array
+          description: Only types that have at least one file, largest first
+          items:
+            $ref: '#/components/schemas/StorageBreakdownCategory'
+        trash:
+          type: object
+          required: [bytes, count]
+          description: Trashed files. Still on disk until the trash is emptied, but excluded from the percentages.
+          properties:
+            bytes:
+              type: integer
+              format: int64
+            count:
+              type: integer
+
   responses:
     Unauthorized:
       description: Missing or invalid JWT
@@ -1330,3 +1378,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /storage/breakdown:
+    get:
+      tags: [System]
+      summary: Storage used by the caller, grouped by file type
+      description: |
+        Groups the caller's non-trashed files by MIME type into images, videos, audio, PDFs,
+        documents (Office files, text, CSV, JSON, ...), archives and other, with the size, file count
+        and percentage of the caller's total size for each. Computed from the database (no disk scan).
+        Percentages are by bytes, not by file count. Trashed files are reported separately in `trash`.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Per-type usage, largest type first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageBreakdown'
+              example:
+                totalBytes: 1500000000
+                totalFiles: 42
+                categories:
+                  - { key: images, label: Images, bytes: 900000000, count: 30, percentage: 60.0 }
+                  - { key: pdf, label: PDFs, bytes: 450000000, count: 8, percentage: 30.0 }
+                  - { key: other, label: Other, bytes: 150000000, count: 4, percentage: 10.0 }
+                trash: { bytes: 20000000, count: 2 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
