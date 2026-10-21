@@ -258,3 +258,32 @@ curl -X POST 'https://<subdomain>.duckdns.org/auth/login' \
   -H 'Content-Type: application/json' \
   -d '{ "email": "<admin-email>", "password": "<strong-password>" }'
 ```
+## 9. Update after each merge on `main`
+
+Run these on the server, from the project folder, every time something is merged on `main`. The `&&` chain stops at the first error, so a failed build never restarts the app on broken code.
+
+```bash
+cd ~/Klaody-back
+git pull origin main
+npm install                      # add --legacy-peer-deps --force only if npm reports peer-dependency conflicts
+npx prisma generate              # regenerates the Prisma client (needed if schema.prisma changed)
+npx prisma migrate deploy        # applies new migrations, does nothing if there are none
+npm run build
+pm2 restart klaody-back
+pm2 logs klaody-back --lines 30  # check that the server started without errors
+curl http://localhost:3000/healthz   # should return OK
+```
+
+Same thing as one command:
+
+```bash
+cd ~/Klaody-back && git pull origin main && npm install && npx prisma generate && npx prisma migrate deploy && npm run build && pm2 restart klaody-back && curl http://localhost:3000/healthz
+```
+
+Notes:
+
+- **Migrations:** always use `migrate deploy` in production, never `migrate dev`. Take a database backup first when a merge contains a migration that rewrites data (for example the UUID one): `sudo -u postgres pg_dump klaody > ~/klaody-$(date +%F).sql`.
+- **New or changed `.env` variables:** edit `.env` before restarting, then `pm2 restart klaody-back --update-env`.
+- **Image search:** only run `node dist/scripts/backfill-index.js` if the merge changes the indexing logic or you need to re-index existing images (the server must be running).
+- **Nginx and firewall:** nothing to do, unless the merge changes the port or the max upload size (then `sudo nginx -t && sudo systemctl reload nginx`).
+- **Frontend:** hosted on Render, it redeploys by itself after a merge on `main`. Nothing to run on the VM.
