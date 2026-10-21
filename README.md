@@ -15,6 +15,7 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
   - [Files](#files)
   - [Folders](#folders)
   - [Trash](#trash)
+  - [Storage](#storage)
 - [Scripts](#scripts)
 - [License](#license)
 
@@ -25,6 +26,7 @@ A personal cloud storage service (Google‑Drive‑like) built with **Node.js**,
 - File listing, rename, move, and soft‑delete (trash)
 - Nested folders (create, browse, rename, move) with recursive soft‑delete
 - Trash listing and restore for files and folders, in single or bulk mode, plus restore‑all and empty‑trash
+- Storage usage and a per‑type breakdown (images, PDFs, …) as a percentage of your files
 - OpenAPI contract in `openapi.yaml`
 
 ## Prerequisites
@@ -131,6 +133,28 @@ All routes require the `Authorization: Bearer <token>` header. Folder names must
 | `DELETE` | `/trash` | **Empty the trash: permanently** deletes every trashed file and folder, including the stored files on disk. Cannot be undone. Returns `{ deletedFiles, deletedFolders }`. |
 | `POST` | `/trash/files/:id/restore` | Restore a file. `409` if its parent folder is still trashed. |
 | `POST` | `/trash/folders/:id/restore` | Restore a folder with everything trashed together with it. `409` if its parent is still trashed or a live sibling has the same name. |
+
+### Storage
+Both routes require the `Authorization: Bearer <token>` header.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/storage` | Disk usage of the filesystem backing `FILE_ROOT`: `totalBytes`, `freeBytes`, `availableBytes`, `reservedBytes`, `usableBytes`, `usableGB`. A safety margin (`STORAGE_RESERVE_RATIO`, default 10 %) is withheld from `usableBytes`. |
+| `GET` | `/storage/breakdown` | The caller's non‑trashed files grouped by type: `images`, `videos`, `audio`, `pdf`, `documents` (Office files, text, CSV, JSON…), `archives`, `other`. Returns `{ totalBytes, totalFiles, categories: [{ key, label, bytes, count, percentage }], trash: { bytes, count } }`, largest type first. `percentage` is the share of the total **size** (not file count), 0–100 with one decimal. Trashed files are reported in `trash` and excluded from the percentages. Computed from the database, with no disk scan. |
+
+Example response for `GET /storage/breakdown`:
+```json
+{
+  "totalBytes": 1500000000,
+  "totalFiles": 42,
+  "categories": [
+    { "key": "images", "label": "Images", "bytes": 900000000, "count": 30, "percentage": 60.0 },
+    { "key": "pdf", "label": "PDFs", "bytes": 450000000, "count": 8, "percentage": 30.0 },
+    { "key": "other", "label": "Other", "bytes": 150000000, "count": 4, "percentage": 10.0 }
+  ],
+  "trash": { "bytes": 20000000, "count": 2 }
+}
+```
 
 Invalid filter values return `400 { "error": "…" }`. See `openapi.yaml` for the full request/response contract.
 

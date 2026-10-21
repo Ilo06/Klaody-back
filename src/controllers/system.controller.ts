@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { getDiskUsage } from '../utils/disk';
+import { getStorageBreakdown } from '../services/storage-breakdown.service';
 
 // GET /storage — get disk usage and available space for the storage filesystem.
 export async function getStorage(_req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -15,6 +16,15 @@ export async function getStorage(_req: AuthenticatedRequest, res: Response, next
       usableBytes: usage.usableBytes,
       usableGB: +(usage.usableBytes / 1024 ** 3).toFixed(2),
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /storage/breakdown — the caller's non-trashed files grouped by type (images, PDFs, ...),
+export async function getBreakdown(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    res.json(await getStorageBreakdown(req.userId!));
   } catch (err) {
     next(err);
   }
