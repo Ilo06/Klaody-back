@@ -1,0 +1,71 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+      APP_DIR: ${{ secrets.APP_DIR }}
+      SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
+      HEALTH_URL: ${{ secrets.HEALTH_URL }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy on server
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "APP_DIR='$APP_DIR' SERVICE_NAME='$SERVICE_NAME' HEALTH_URL='$HEALTH_URL' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'EOF'
+          set -euo pipefail
+
+          # Non-interactive SSH shells often miss nvm/node/pm2 in PATH
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+          cd "$APP_DIR"
+          PREVIOUS_SHA=$(git rev-parse HEAD)
+          echo "Previous commit: $PREVIOUS_SHA"
+
+          git fetch origin
+          git reset --hard "$DEPLOY_SHA"
+
+          npm ci --omit=dev
+          npx prisma generate
+          npx prisma migrate deploy
+
+          pm2 restart "$SERVICE_NAME" --update-env
+          pm2 save
+
+          # Health check (retry for up to ~30s)
+          for i in $(seq 1 10); do
+            if curl -fsS "$HEALTH_URL" > /dev/null; then
+              echo "Health check OK"
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "Health check FAILED. Previous commit was $PREVIOUS_SHA"
+          pm2 logs "$SERVICE_NAME" --lines 30 --nostream || true
+          exit 1
+          EOF
