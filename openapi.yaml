@@ -433,6 +433,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+            description: Too many failed login attempts; retry after the delay in the Retry-After header
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ErrorResponse'
 
   /auth/me:
     get:
