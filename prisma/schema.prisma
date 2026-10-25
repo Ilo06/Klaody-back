@@ -22,6 +22,7 @@ model User {
   createdAt    DateTime @default(now())
   files        File[]
   folders      Folder[]
+  uploadSessions UploadSession[]
 }
 
 model Folder {
@@ -78,4 +79,32 @@ model ImageEmbedding {
   embedding Unsupported("vector(512)")
   model     String
   createdAt DateTime @default(now())
+}
+
+// Resumable chunked upload (files above the multipart threshold).
+// The bytes live in a sparse part file at FILE_ROOT/.uploads/<id> until the upload is completed.
+model UploadSession {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String        @db.Uuid
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  mimeType    String
+  size        BigInt
+  folderId    String?       @db.Uuid
+  chunkSize   Int
+  totalChunks Int
+  storedName  String        // final on-disk name, reserved at session creation
+  createdAt   DateTime      @default(now())
+  chunks      UploadChunk[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model UploadChunk {
+  sessionId String        @db.Uuid
+  index     Int
+  session   UploadSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, index])
 }

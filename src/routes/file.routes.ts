@@ -12,6 +12,13 @@ import {
   deleteFile,
   createShare,
 } from '../controllers/file.controller';
+import {
+  createUploadSession,
+  getUploadSession,
+  uploadChunk,
+  completeUpload,
+  abortUpload,
+} from '../controllers/upload-session.controller';
 
 const router = Router();
 
@@ -20,6 +27,14 @@ router.use(authenticate);
 router.get('/', listFiles);
 router.get('/search', searchFiles); // must stay before '/:id'
 router.post('/', upload.single('file'), uploadFile);
+
+// Resumable chunked upload (large files)  must stay before '/:id'
+router.post('/uploads', createUploadSession);
+router.get('/uploads/:id', getUploadSession);
+router.put('/uploads/:id/chunks/:index', uploadChunk);
+router.post('/uploads/:id/complete', completeUpload);
+router.delete('/uploads/:id', abortUpload);
+
 router.get('/:id', downloadFile);
 router.get('/:id/preview', previewFile); // reduced-size copy of an image (the download stays full resolution)
 router.patch('/:id/rename', renameFile);
