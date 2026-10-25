@@ -1,5 +1,6 @@
 import app from './app';
 import { startIndexing, stopIndexing } from './services/indexing.service';
+import { startUploadCleanup } from './services/chunked-upload.service';
 
 const PORT = process.env.PORT || 3000;
 
@@ -9,6 +10,8 @@ async function main() {
   } catch (err) {
     console.error('[indexing] disabled, could not start the queue:', err);
   }
+
+  startUploadCleanup();
 
   const server = app.listen(PORT, () => {
     console.log(` Server listening on http://localhost:${PORT}`);
