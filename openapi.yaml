@@ -288,6 +288,54 @@ components:
           format: float
           description: usableBytes expressed in GB, rounded to 2 decimals
 
+    ImageDetails:
+      type: object
+      required: [width, height, format, exif, gps]
+      properties:
+        width:
+          type: integer
+          nullable: true
+          description: Pixels, as displayed (EXIF orientation applied)
+        height:
+          type: integer
+          nullable: true
+        format:
+          type: string
+          nullable: true
+          example: jpeg
+        exif:
+          nullable: true
+          description: null when the file carries no EXIF
+          type: object
+          properties:
+            cameraMake: { type: string, nullable: true, example: FUJIFILM }
+            cameraModel: { type: string, nullable: true, example: X-T4 }
+            lens: { type: string, nullable: true }
+            takenAt:
+              type: string
+              nullable: true
+              example: '2026-10-20T14:03:09'
+              description: Camera wall-clock time. EXIF has no timezone, so this has none either; show it as-is.
+            iso: { type: integer, nullable: true, example: 800 }
+            fNumber: { type: number, nullable: true, example: 1.8 }
+            exposureTime: { type: number, nullable: true, example: 0.004, description: Seconds }
+            focalLength: { type: number, nullable: true, example: 35, description: Millimetres }
+            focalLength35mm: { type: number, nullable: true, description: 35mm-equivalent, in millimetres }
+            exposureBias: { type: number, nullable: true, description: EV }
+            flash: { type: string, nullable: true }
+            meteringMode: { type: string, nullable: true }
+            whiteBalance: { type: string, nullable: true }
+            software: { type: string, nullable: true }
+        gps:
+          nullable: true
+          description: null when the photo has no location
+          type: object
+          required: [latitude, longitude, altitude]
+          properties:
+            latitude: { type: number, example: -18.8667 }
+            longitude: { type: number, example: 47.5167 }
+            altitude: { type: number, nullable: true, description: Metres above sea level }
+
     StorageBreakdownCategory:
       type: object
       required: [key, label, bytes, count, percentage]
@@ -736,6 +784,44 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: The image could not be decoded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /files/{id}/details:
+    get:
+      tags: [Files]
+      summary: Details of an image (EXIF, GPS, dimensions)
+      description: |
+        Returns the pixel dimensions of an image and the metadata its file carries: camera, lens, ISO,
+        aperture, shutter speed, focal length, capture time and GPS position. Read from the stored file
+        on each call; nothing is persisted. `exif` and `gps` are `null` when the image has none
+        (screenshots, photos stripped of metadata). Only available to the file's owner.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Image details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDetails'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '415':
+          description: The file is not an image
           content:
             application/json:
               schema:
