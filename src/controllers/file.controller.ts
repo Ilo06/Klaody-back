@@ -14,6 +14,7 @@ import { createShareLink } from '../services/share.service';
 import { enqueueIndexing, isIndexable } from '../services/indexing.service';
 import { searchImages, DEFAULT_MIN_SIMILARITY } from '../services/image-search.service';
 import { DEFAULT_PREVIEW_WIDTH, getPreview, isPreviewable, snapPreviewWidth } from '../services/preview.service';
+import { readImageDetails } from '../services/image-details.service';
 import { HttpError } from '../utils/errors';
 
 // Builds an RFC 6266 / RFC 5987 compliant Content-Disposition header value.
@@ -229,6 +230,38 @@ export async function previewFile(req: AuthenticatedRequest, res: Response, next
     const stream = fs.createReadStream(preview.path);
     stream.on('error', (err) => next(err));
     stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /files/:id/details — dimensions + EXIF (camera, ISO, aperture, shutter, focal length...) + GPS of an image.
+// Read from the file on disk on each call (only the header is parsed), nothing is stored in the database.
+// `exif` / `gps` are null when the image carries none (screenshots, stripped or re-encoded photos).
+export async function getFileDetails(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ error: 'invalid file id' });
+    }
+
+    const file = await prisma.file.findFirst({
+      where: { id, userId: req.userId!, deletedAt: null },
+    });
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (!file.mimeType.toLowerCase().startsWith('image/')) {
+      return res.status(415).json({ error: 'Details are only available for images' });
+    }
+
+    const filePath = path.join(FILE_ROOT, file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.json(await readImageDetails(filePath));
   } catch (err) {
     next(err);
   }

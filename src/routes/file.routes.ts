@@ -7,6 +7,7 @@ import {
   uploadFile,
   downloadFile,
   previewFile,
+  getFileDetails,
   renameFile,
   moveFile,
   deleteFile,
@@ -37,6 +38,7 @@ router.delete('/uploads/:id', abortUpload);
 
 router.get('/:id', downloadFile);
 router.get('/:id/preview', previewFile); // reduced-size copy of an image (the download stays full resolution)
+router.get('/:id/details', getFileDetails); // EXIF / GPS / dimensions of an image
 router.patch('/:id/rename', renameFile);
 router.patch('/:id/move', moveFile);
 router.delete('/:id', deleteFile);
