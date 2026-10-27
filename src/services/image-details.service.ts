@@ -67,11 +67,6 @@ export async function readImageDetails(filePath: string): Promise<ImageDetails> 
       tiff: true,
       exif: true,
       gps: true,
-      ifd0: true,
-      ifd1: false,
-      xmp: false,
-      icc: false,
-      iptc: false,
       translateValues: true, // "Flash fired" instead of 1
       reviveValues: false, // keep dates as raw strings: Date objects would be built in the server's timezone
       mergeOutput: true,
